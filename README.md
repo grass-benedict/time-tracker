@@ -19,9 +19,11 @@ TimeMaster provides a centralized platform for managing employee working hours a
 
 The application is built using a modern and robust technology stack:
 
+  * **Language:** **TypeScript**
   * **Frontend:** **React** (for a dynamic and responsive user interface)
   * **Backend:** **Express.js** (for routing and middleware) running on **Node.js** (as the server environment)
   * **Database:** **PostgreSQL** (for reliable and scalable data storage)
+  * **Design:** **TailwindCSS**
 
 -----
 
