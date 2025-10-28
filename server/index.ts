@@ -13,6 +13,13 @@ app.use('/api/users', userRoutes);
 
 const PORT = process.env.PORT || 5000;
 
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    message: 'Time Tracking API is running successfully!',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 async function startServer() {
   try {
     await sequelize.authenticate();
