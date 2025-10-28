@@ -10,7 +10,7 @@ dotenv.config({
 //TODO: Find out why
 const sequelize = new Sequelize(
   // 1. Database Name
-  "mydatabase",
+  "time_tracker",
   
   // 2. Database Username
   "admin",
@@ -20,7 +20,7 @@ const sequelize = new Sequelize(
   
   // 4. Options Object
   {
-    host: process.env.DB_HOST!,
+    host: 'localhost',
     dialect: 'postgres',
     logging: false,
   }
