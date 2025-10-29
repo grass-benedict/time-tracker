@@ -1,5 +1,5 @@
 import { DataTypes, Model } from 'sequelize';
-import { sequelize } from './sync.ts';
+import sequelize from '../config/database.ts';
 
 class Employee extends Model {
   public id!: number;

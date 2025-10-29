@@ -13,7 +13,8 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix server\" \"npm start --prefix client\""
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "seed": "ts-node ./server/seed.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.16"

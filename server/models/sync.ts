@@ -1,5 +1,28 @@
 import sequelize from "../config/database.ts";
 import Employee from "./employee.ts";
+import TimeLog from "./timeLog.ts";
+import StatusLog from "./statusLog.ts";
+
+// Associations
+Employee.hasMany(TimeLog, {
+    foreignKey: 'employeeId',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+});
+
+Employee.hasMany(StatusLog,{
+    foreignKey: 'employeeId',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+});
+
+TimeLog.belongsTo(Employee, {
+    foreignKey: 'employeeId',
+});
+
+StatusLog.belongsTo(Employee, {
+    foreignKey: 'employeeId'
+});
 
 const syncModels = async () => {
     try {
@@ -10,4 +33,4 @@ const syncModels = async () => {
     }
 };
 
-export { sequelize, Employee, syncModels };
+export { sequelize, Employee, TimeLog, StatusLog ,syncModels };
