@@ -161,7 +161,7 @@ export default function App() {
       <main className="container mx-auto px-4 py-8">
   {activeRole === 'employee' && <EmployeeDashboard employeeId={currentUserID} />}
         {activeRole === 'supervisor' && <SupervisorDashboard />}
-        {activeRole === 'hr' && <HRDashboard />}
+        {activeRole === 'hr' && <HRDashboard employeeId={currentUserID}/>}
         {activeRole === 'department-calendar' && <DepartmentCalendarView />}
         
         {/* API Testing Interface (only shown in development) */}

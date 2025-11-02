@@ -56,5 +56,14 @@
     server: {
       port: 3000,
       open: true,
+      // Proxy API calls to the backend during development so fetch('/api/...') reaches the Express server
+      proxy: {
+        '/api': {
+          target: 'http://localhost:5000',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path,
+        },
+      },
     },
   });
