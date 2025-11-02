@@ -17,6 +17,8 @@
     "seed": "ts-node ./server/seed.ts"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.16"
+    "@tailwindcss/vite": "^4.1.16",
+    "axios": "^1.13.1",
+    "ts-node": "^10.9.2"
   }
 }
