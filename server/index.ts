@@ -3,11 +3,11 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import sequelize from './config/database.ts';
 import employeeRoutes from './routes/employeeRoutes.ts';
-import statusLogRoutes from './routes/statusLogRoutes.ts';
+import leaveRequestRoutes from './routes/leaveRequestRoutes.ts';
 import timeLogRoutes from './routes/timeLogRoutes.ts';
 import userRoutes from './routes/userRoutes.ts';
 import Employee from './models/employee.ts';
-import StatusLog from './models/statusLog.ts';
+import LeaveRequest from './models/leaveRequest.ts';
 import TimeLog from './models/timeLog.ts';
 import { syncModels } from "./models/sync.ts";
 
@@ -30,13 +30,14 @@ app.get('/', (req, res) => {
 // User routes (mounted by the router)
 app.use('/api/users', userRoutes);
 app.use('/api/employee', employeeRoutes);
-app.use('/api/statusLogs', statusLogRoutes);
+app.use('/api/leaveRequests', leaveRequestRoutes);
 app.use('/api/timeLogs', timeLogRoutes);
 
 // Single route to display all employees (for testing)
 app.get('/api/employee/all', async (req, res) => {
   try {
-    const employees = await Employee.findAll(); 
+    // exclude password column for safety
+    const employees = await Employee.findAll({ attributes: { exclude: ['password'] } });
     res.status(200).json(employees);
   } catch (error) {
     console.error('Error fetching employees:', error);

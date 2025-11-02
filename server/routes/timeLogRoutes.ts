@@ -3,8 +3,8 @@ import type { Request, Response } from 'express';
 import TimeLog from '../models/timeLog.ts';
 import { ValidationError, Op } from 'sequelize';
 
-// Valid event types - extend this based on your requirements
-type EventType = 'clockIn' | 'clockOut' | 'breakStart' | 'breakEnd';
+// Valid event types as defined in the DB model
+type EventType = 'IN' | 'OUT';
 
 // Type for creating a new time log
 type CreateTimeLogBody = {
@@ -35,11 +35,17 @@ const router: Router = express.Router();
 router.get('/', async (req: Request<{}, {}, {}, TimeLogQuery>, res: Response) => {
     try {
         const { employeeId, eventType, fromDate, toDate } = req.query;
-        
+
         // Build query conditions
         const where: any = {};
         if (employeeId) where.employeeId = parseInt(employeeId);
-        if (eventType) where.eventType = eventType;
+        if (eventType) {
+            // Only accept valid event types
+            if (!['IN', 'OUT'].includes(eventType)) {
+                return res.status(400).json({ message: 'Invalid eventType query parameter' });
+            }
+            where.eventType = eventType;
+        }
         if (fromDate) where.clockTime = { ...where.clockTime, [Op.gte]: new Date(fromDate) };
         if (toDate) where.clockTime = { ...where.clockTime, [Op.lte]: new Date(toDate) };
 
@@ -117,9 +123,9 @@ router.post('/', async (req: Request<{}, {}, CreateTimeLogBody>, res: Response) 
         };
 
         // Validate event type
-        if (!['clockIn', 'clockOut', 'breakStart', 'breakEnd'].includes(body.eventType)) {
+        if (!['IN', 'OUT'].includes(body.eventType)) {
             return res.status(400).json({
-                message: 'Invalid event type. Must be clockIn, clockOut, breakStart, or breakEnd'
+                message: 'Invalid event type. Must be IN or OUT'
             });
         }
 
@@ -149,9 +155,9 @@ router.put('/:id', async (req: Request<TimeLogParams, {}, UpdateTimeLogBody>, re
         }
 
         // Validate event type if provided
-        if (body.eventType && !['clockIn', 'clockOut', 'breakStart', 'breakEnd'].includes(body.eventType)) {
+        if (body.eventType && !['IN', 'OUT'].includes(body.eventType)) {
             return res.status(400).json({
-                message: 'Invalid event type. Must be clockIn, clockOut, breakStart, or breakEnd'
+                message: 'Invalid event type. Must be IN or OUT'
             });
         }
 

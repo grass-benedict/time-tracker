@@ -7,9 +7,16 @@ type CreateEmployeeBody = {
     surname: string;
     username: string;
     password: string;
-    vacationDays: number;
-    flexAccount: number;
-    role?: string;
+    vacationDays?: number;
+    flexAccount?: number;
+    role?: 'employee' | 'manager' | 'hr' | 'admin' | null;
+    flexMonthly?: number | null;
+    vacationDaysUsed?: number;
+    vacationDaysPending?: number;
+    hoursMonthly?: number;
+    hoursWorked?: number;
+    department?: string;
+    managerId?: number | null;
 }
 
 type UpdateEmployeeBody = Partial<CreateEmployeeBody>;
@@ -21,7 +28,8 @@ const router: Router = express.Router();
 // GET all employees
 router.get('/', async (_req: Request, res: Response) => {
     try {
-        const employees = await Employee.findAll();
+        // exclude password so we don't leak hashed passwords to clients
+        const employees = await Employee.findAll({ attributes: { exclude: ['password'] } });
         res.json(employees);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'An unknown error occurred';
@@ -32,7 +40,7 @@ router.get('/', async (_req: Request, res: Response) => {
 // GET single employee by ID
 router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
     try {
-        const employee = await Employee.findByPk(req.params.id);
+        const employee = await Employee.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
         if (employee) {
             res.json(employee);
         } else {
@@ -47,8 +55,11 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
 // POST new employee
 router.post('/', async (req: Request<{}, {}, CreateEmployeeBody>, res: Response) => {
     try {
-        const newEmployee = await Employee.create(req.body as EmployeeCreationAttributes);
-        res.status(201).json(newEmployee);
+    // Cast to any here because incoming payload may not have strictly all creation defaults/types
+    const newEmployee = await Employee.create(req.body as any);
+        // do not return password to client
+        const safeEmployee = await Employee.findByPk(newEmployee.id, { attributes: { exclude: ['password'] } });
+        res.status(201).json(safeEmployee);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'An unknown error occurred';
         res.status(400).json({ message });
@@ -63,7 +74,7 @@ router.put('/:id', async (req: Request<{ id: string }, {}, UpdateEmployeeBody>, 
         });
 
         if (updateCount > 0) {
-            const updatedEmployee = await Employee.findByPk(req.params.id);
+            const updatedEmployee = await Employee.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
             res.json(updatedEmployee);
         } else {
             res.status(404).json({ message: 'Employee not found' });
