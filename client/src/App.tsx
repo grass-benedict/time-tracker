@@ -3,6 +3,7 @@ import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { SupervisorDashboard } from './components/SupervisorDashboard';
 import { HRDashboard } from './components/HRDashboard';
 import { DepartmentCalendarView } from './components/DepartmentCalendarView';
+import { APITest } from './components/APITest';
 import { LoginPage } from './components/LoginPage';
 import { ThemeToggle } from './components/ThemeToggle';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './components/ui/sheet';
@@ -16,6 +17,8 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState<UserRole>('employee');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const currentUserID = 2; // Placeholder for current logged-in user ID
 
   const handleLogin = (role: UserRole) => {
     setActiveRole(role);
@@ -156,10 +159,18 @@ export default function App() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {activeRole === 'employee' && <EmployeeDashboard />}
+  {activeRole === 'employee' && <EmployeeDashboard employeeId={currentUserID} />}
         {activeRole === 'supervisor' && <SupervisorDashboard />}
-        {activeRole === 'hr' && <HRDashboard />}
+        {activeRole === 'hr' && <HRDashboard employeeId={currentUserID}/>}
         {activeRole === 'department-calendar' && <DepartmentCalendarView />}
+        
+        {/* API Testing Interface (only shown in development) */}
+        {/* 
+        {import.meta.env.DEV && (
+          <div className="mt-8 border-t border-border pt-8">
+            <APITest />
+          </div>
+        )} */}
       </main>
 
       {/* Footer */}

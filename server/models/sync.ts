@@ -1,28 +1,20 @@
 import sequelize from "../config/database.ts";
 import Employee from "./employee.ts";
 import TimeLog from "./timeLog.ts";
-import StatusLog from "./statusLog.ts";
+import LeaveRequest from "./leaveRequest.ts";
 
-// Associations
-Employee.hasMany(TimeLog, {
-    foreignKey: 'employeeId',
-    onDelete: 'CASCADE',
-    onUpdate: 'CASCADE'
+// EMPLOYEE -> EMPLOYEE (manager relationship)
+Employee.hasMany(Employee,{
+    as:'subordinates',
+    foreignKey: 'managerId'
+});
+Employee.belongsTo(Employee, {
+    as: 'manager',
+    foreignKey: 'managerId',
 });
 
-Employee.hasMany(StatusLog,{
-    foreignKey: 'employeeId',
-    onDelete: 'CASCADE',
-    onUpdate: 'CASCADE'
-});
+// EMPLOYEE -> TIME LOG
 
-TimeLog.belongsTo(Employee, {
-    foreignKey: 'employeeId',
-});
-
-StatusLog.belongsTo(Employee, {
-    foreignKey: 'employeeId'
-});
 
 const syncModels = async () => {
     try {
@@ -33,4 +25,4 @@ const syncModels = async () => {
     }
 };
 
-export { sequelize, Employee, TimeLog, StatusLog ,syncModels };
+export { sequelize, Employee, TimeLog, LeaveRequest ,syncModels };

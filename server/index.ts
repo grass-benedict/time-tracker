@@ -2,8 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import sequelize from './config/database.ts';
+import employeeRoutes from './routes/employeeRoutes.ts';
+import leaveRequestRoutes from './routes/leaveRequestRoutes.ts';
+import timeLogRoutes from './routes/timeLogRoutes.ts';
 import userRoutes from './routes/userRoutes.ts';
 import Employee from './models/employee.ts';
+import LeaveRequest from './models/leaveRequest.ts';
+import TimeLog from './models/timeLog.ts';
 import { syncModels } from "./models/sync.ts";
 
 dotenv.config();
@@ -24,15 +29,23 @@ app.get('/', (req, res) => {
 
 // User routes (mounted by the router)
 app.use('/api/users', userRoutes);
+app.use('/api/employee', employeeRoutes);
+app.use('/api/leaveRequests', leaveRequestRoutes);
+app.use('/api/timeLogs', timeLogRoutes);
 
-// Single route to display all users (for testing)
-app.get('/api/users/all', async (req, res) => {
+// Single route to display all employees (for testing)
+app.get('/api/employee/all', async (req, res) => {
   try {
-    const users = await Employee.findAll(); 
-    res.status(200).json(users);
+    // exclude password column for safety
+    const employees = await Employee.findAll({ attributes: { exclude: ['password'] } });
+    res.status(200).json(employees);
   } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to retrieve user data' });
+    console.error('Error fetching employees:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    // Return more detailed error information in development to help debugging
+    const payload: Record<string, unknown> = { error: 'Failed to retrieve employee data' };
+    if (process.env.NODE_ENV !== 'production') payload.details = message;
+    res.status(500).json(payload);
   }
 });
 // -----------------------

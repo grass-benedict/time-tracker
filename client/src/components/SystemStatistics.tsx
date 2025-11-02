@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Users, Calendar, Clock, TrendingUp, Mail, Phone } from 'lucide-react';
 
-const systemStats = {
-  totalEmployees: 247,
+const initialStats = {
+  totalEmployees: 0,
   activeToday: 231,
   onVacation: 16,
   averageFlexBalance: 5.2,
@@ -67,6 +67,26 @@ const departmentEmployees: Record<string, Array<{ name: string; position: string
 export function SystemStatistics() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [systemStats, setSystemStats] = useState(initialStats);
+
+  useEffect(() => {
+    const fetchEmployeeCount = async () => {
+      try {
+        const res = await fetch('/api/employee');
+        if (!res.ok) {
+          throw new Error(`Failed to fetch employee data: ${res.status}`);
+        }
+        const employees = await res.json();
+        const count = Array.isArray(employees) ? employees.length : (employees?.count ?? 0);
+        setSystemStats((s) => ({ ...s, totalEmployees: count }));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Error fetching employee count', err);
+      }
+    };
+
+    fetchEmployeeCount();
+  }, []);
 
   const handleDepartmentClick = (departmentName: string) => {
     setSelectedDepartment(departmentName);

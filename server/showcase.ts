@@ -13,7 +13,7 @@ const employee = await Employee.findOne({
     where: {name: 'Maybell'}
 });
 
-
+//example comment
 
 //console.log(employees);
 //console.log(manager);

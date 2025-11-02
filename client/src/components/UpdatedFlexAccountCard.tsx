@@ -1,9 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Clock, TrendingUp } from 'lucide-react';
 
-export function UpdatedFlexAccountCard() {
-  const balance = 12.5;
-  const thisMonth = 6.2;
+interface FlexAccountCardProps {
+  flexAccount: number;
+  thisMonth?: number; // Optional since we might not have this data yet
+  loading?: boolean;
+}
+
+export function UpdatedFlexAccountCard({ 
+  flexAccount,
+  thisMonth = 0, // Default to 0 if not provided
+  loading = false
+}: FlexAccountCardProps) {
+  const balance = flexAccount;
   const isPositive = balance >= 0;
 
   return (
@@ -19,7 +28,11 @@ export function UpdatedFlexAccountCard() {
       <CardContent className="space-y-3">
         <div>
           <div className={`text-3xl ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-            {isPositive ? '+' : ''}{balance}h
+            {loading ? (
+              '...'
+            ) : (
+              <>{isPositive ? '+' : ''}{balance.toFixed(1)}h</>
+            )}
           </div>
           <div className="text-sm text-muted-foreground">
             Overtime balance
@@ -29,7 +42,7 @@ export function UpdatedFlexAccountCard() {
           <span className="text-muted-foreground">This month:</span>
           <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
             <TrendingUp className="h-3 w-3" />
-            +{thisMonth}h
+            {loading ? '...' : `${thisMonth > 0 ? '+' : ''}${thisMonth.toFixed(1)}h`}
           </span>
         </div>
       </CardContent>

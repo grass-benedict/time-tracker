@@ -19,7 +19,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+
+interface EmployeeAPI {
+  id: number;
+  name: string;
+  surname: string;
+  username: string;
+  vacationDays: number;
+  flexAccount: number;
+  role?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 
 const allEmployees = [
   { id: 'EMP-001', name: 'Sophie Meier', department: 'Engineering', supervisor: 'Harald Schmidt', status: 'active', flexBalance: 12.5 },
@@ -29,7 +42,7 @@ const allEmployees = [
   { id: 'EMP-005', name: 'Thomas Klein', department: 'Sales', supervisor: 'Maria Weber', status: 'vacation', flexBalance: 2.5 },
 ];
 
-export function HRDashboard() {
+export function HRDashboard({ employeeId }: { employeeId: number }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [employees, setEmployees] = useState(allEmployees);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Play, Coffee, StopCircle, Check } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 type WorkStatus = 'off-duty' | 'working' | 'on-break';
 
-export function SimpleClockInCard() {
+export function SimpleClockInCard({ employeeId }: { employeeId?: number }) {
   const [status, setStatus] = useState<WorkStatus>('off-duty');
   const [workTime, setWorkTime] = useState(0); // in seconds
   const [breakTime, setBreakTime] = useState(0); // in seconds
@@ -47,6 +47,43 @@ export function SimpleClockInCard() {
     setWorkTime(0);
     setBreakTime(0);
     toast.success('Clocked in successfully - Work timer started');
+
+    // Create a time log entry for IN
+    (async () => {
+      try {
+        if (!employeeId) {
+          console.warn('No employeeId provided for clock in; skipping server timeLog creation');
+          return;
+        }
+
+        const res = await fetch('/api/timeLogs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId,
+            clockTime: new Date().toISOString(),
+            eventType: 'IN'
+          })
+        });
+
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`Failed creating IN time log: ${res.status} ${body}`);
+        }
+        // notify listeners that time logs changed for this employee
+        try {
+          window.dispatchEvent(new CustomEvent('timeLogChanged', { detail: { employeeId } }));
+        } catch (e) {
+          const ev: any = document.createEvent('CustomEvent');
+          ev.initCustomEvent('timeLogChanged', true, true, { employeeId });
+          window.dispatchEvent(ev);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(message);
+        toast.error('Failed to record clock in (server)');
+      }
+    })();
   };
 
   const handleStartBreak = () => {
@@ -66,6 +103,75 @@ export function SimpleClockInCard() {
     setWorkTime(0);
     setBreakTime(0);
     toast.success(`Clocked out - Work: ${totalWorkTime}, Break: ${totalBreakTime}`);
+
+    // Create OUT time log and update employee hoursWorked on success
+    (async () => {
+      try {
+        if (!employeeId) {
+          console.warn('No employeeId provided for clock out; skipping server timeLog and hours update');
+          return;
+        }
+
+        // Post OUT time log
+        const outRes = await fetch('/api/timeLogs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId,
+            clockTime: new Date().toISOString(),
+            eventType: 'OUT'
+          })
+        });
+
+        if (!outRes.ok) {
+          const text = await outRes.text();
+          throw new Error(`Failed creating OUT time log: ${outRes.status} ${text}`);
+        }
+
+        // Fetch current employee hoursWorked
+        const empRes = await fetch(`/api/employee/${employeeId}`);
+        if (!empRes.ok) {
+          const t = await empRes.text();
+          throw new Error(`Failed fetching employee: ${empRes.status} ${t}`);
+        }
+        const emp = await empRes.json();
+        const currentHours = typeof emp.hoursWorked === 'number' ? emp.hoursWorked : 0;
+
+        const deltaHours = workTime / 3600; // workTime is in seconds
+        const newHours = Number((currentHours + deltaHours).toFixed(3));
+
+        // Update employee hoursWorked
+        const putRes = await fetch(`/api/employee/${employeeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hoursWorked: newHours })
+        });
+
+        if (!putRes.ok) {
+          const t = await putRes.text();
+          throw new Error(`Failed updating employee hours: ${putRes.status} ${t}`);
+        }
+
+        // Notify other components (ClockDisplayCard) to refresh both ways
+        try {
+          window.dispatchEvent(new CustomEvent('employeeHoursUpdated', { detail: { employeeId, hoursWorked: newHours } }));
+          window.dispatchEvent(new CustomEvent('timeLogChanged', { detail: { employeeId } }));
+        } catch (e) {
+          // older browsers might not support CustomEvent constructor in some contexts
+          const ev1: any = document.createEvent('CustomEvent');
+          ev1.initCustomEvent('employeeHoursUpdated', true, true, { employeeId, hoursWorked: newHours });
+          window.dispatchEvent(ev1);
+          const ev2: any = document.createEvent('CustomEvent');
+          ev2.initCustomEvent('timeLogChanged', true, true, { employeeId });
+          window.dispatchEvent(ev2);
+        }
+
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(message);
+        toast.error('Failed to record clock out or update hours (server)');
+      }
+    })();
   };
 
   return (
