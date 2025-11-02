@@ -1,99 +1,202 @@
 import { faker } from '@faker-js/faker';
-import { sequelize, Employee, TimeLog, StatusLog } from './models/sync.ts';
+import { sequelize, Employee, TimeLog, LeaveRequest } from './models/sync.ts';
 
-function formatDate(date:Date): Date{
+// Department list — "Executive" reserved for super admin
+const DEPARTMENTS = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations'];
+const EXECUTIVE_DEPARTMENT = 'Executive';
+
+// Utility to zero out time
+function truncateDate(date: Date): Date {
   const d = new Date(date);
-  d.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0);
   return d;
 }
 
 async function seed() {
-  try{
+  try {
+    console.log('🌱 Starting database seed...');
     await sequelize.authenticate();
-    console.log("db connected");
+    console.log('✅ Database connection established.');
 
-    await sequelize.sync({alter: true});
-    console.log('db synced');
+    await sequelize.sync({ force: true }); // fresh reset for dev
+    console.log('✅ Database synced.');
 
-    const dummyEmployees = Array.from({ length: 50 }).map(() => {
+    /* =========================================================
+       1️⃣ Create one Super Admin (Executive)
+       ========================================================= */
+    const superManager = await Employee.create({
+      name: 'Alice',
+      surname: 'Anderson',
+      username: 'admin01',
+      password: 'adminpass',
+      department: EXECUTIVE_DEPARTMENT,
+      vacationDays: 30,
+      vacationDaysUsed: 0,
+      vacationDaysPending: 0,
+      flexAccount: 0,
+      flexMonthly: 0,
+      role: 'admin',
+      hoursMonthly: 160,
+      hoursWorked: 0,
+    });
+
+    console.log(`👑 Created super manager: ${superManager.name}`);
+
+    // Create more employees
+    const employeesData = Array.from({ length: 99 }).map(() => {
       const firstName = faker.person.firstName();
       const lastName = faker.person.lastName();
-
-      // Generate username: first 2 letters of first name + first 2 letters of surname + 2-digit number
       const username =
         firstName.slice(0, 2).toLowerCase() +
         lastName.slice(0, 2).toLowerCase() +
-        String(faker.number.int({ min: 10, max: 99 }));
+        faker.number.int({ min: 10, max: 99 });
 
       return {
         name: firstName,
         surname: lastName,
-        username: username,
-        password: 'password123', // default password
-        vacationDays: faker.number.int({ min: 0, max: 30 }),
+        username,
+        password: 'password123',
+        department: faker.helpers.arrayElement(DEPARTMENTS),
+        vacationDays: faker.number.int({ min: 20, max: 30 }),
+        vacationDaysUsed: faker.number.int({ min: 0, max: 10 }),
+        vacationDaysPending: faker.number.int({ min: 0, max: 5 }),
         flexAccount: faker.number.float({ min: 0, max: 20, fractionDigits: 1 }),
-        role: faker.helpers.arrayElement(['Manager', 'HR', 'default']),
+        flexMonthly: faker.number.float({ min: 0, max: 5, fractionDigits: 1 }),
+        role: faker.helpers.arrayElement(['employee', 'manager', 'hr']),
+        hoursMonthly: 160,
+        hoursWorked: faker.number.float({ min: 100, max: 160, fractionDigits: 1 }),
+        managerId: null,
       };
     });
 
-    await Employee.bulkCreate(dummyEmployees);
-    const createdEmployees = await Employee.findAll({ raw: true });
-    console.log(createdEmployees.map(e => e.id));
-    console.log('Seeded 50 dummy rows');
+    const createdEmployees = await Employee.bulkCreate(employeesData, { returning: true });
+    console.log(`👥 Seeded ${createdEmployees.length} employees.`);
 
-    // dummyTimeLogs array. Any size
-    const dummyTimeLogs: any[] = [];
+    // Making sure each department has at least 1 manager
+    for (const dept of DEPARTMENTS) {
+      const managersInDept = createdEmployees.filter(
+        (e) => e.role === 'manager' && e.department === dept
+      );
 
-    // For each employee, create 5-10 random time logs
-    for (const emp of createdEmployees){
-      const logsCount = faker.number.int({ min: 5, max: 10 });
-      for (let i = 0; i < logsCount; i++) {
-        dummyTimeLogs.push({
-          employeeId: emp.id,
-          clockTime: new Date(faker.date.recent({ days: 14 }).setMilliseconds(0)), // random dates+times for last 14 days
-          eventType: faker.helpers.arrayElement(['IN', 'OUT']),
-        });
+      if (managersInDept.length === 0) {
+        const fallbackManager = faker.helpers.arrayElement(
+          createdEmployees.filter((e) => e.role === 'manager')
+        );
+        await fallbackManager.update({ department: dept });
+        console.log(`🛠️  Assigned ${fallbackManager.name} as manager for ${dept}`);
       }
     }
 
-    await TimeLog.bulkCreate(dummyTimeLogs);
-    console.log(`Seeded ${dummyTimeLogs.length} logs`);
+    // Establishing hierarchy
+    const managers = createdEmployees.filter((e) => e.role === 'manager');
+    const hrs = createdEmployees.filter((e) => e.role === 'hr');
+    const workers = createdEmployees.filter((e) => e.role === 'employee');
 
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    // Managers report to super admin
+    await Promise.all(managers.map((m) => m.update({ managerId: superManager.id })));
 
-    // Only taking a quarter of the employees. 
-    const quarterEmployees = createdEmployees.slice(0, Math.floor(createdEmployees.length / 4));
-
-    // Any size dummyStatusLogs array
-    const dummyStatusLogs: any[] = [];
-
-    // For each employee create a status entry
-    for (const emp of quarterEmployees) {
-      // Generate a random start date within the last 14 days
-      const start = faker.date.recent ({ days:14 });
-
-      const minEnd = start > today ? start : today;
-      const end = new Date(minEnd);
-      end.setDate(minEnd.getDate() + faker.number.int({ min: 1, max: 10 }));
-
-      dummyStatusLogs.push({
-        employeeId: emp.id,
-        statusType: faker.helpers.arrayElement(['SICK', 'VACATION']),
-        startDate: formatDate(start),
-        endDate: formatDate(end),
-        notes: faker.lorem.sentence(),
-      })
+    // Build map of department → manager IDs
+    const managersByDept: Record<string, number[]> = {};
+    for (const m of managers) {
+      (managersByDept[m.department] ??= []).push(m.id);
     }
 
-    await StatusLog.bulkCreate(dummyStatusLogs);
+    // HR → HR manager or super manager
+    await Promise.all(
+      hrs.map((hr) => {
+        const hrManagers = managersByDept['HR'];
+        const managerId = hrManagers?.length
+          ? faker.helpers.arrayElement(hrManagers)
+          : superManager.id;
+        return hr.update({ managerId });
+      })
+    );
 
-  }catch(err){
-    console.error('failed to seed:', err);
-    // finally is needed in order to close instance
+    // Employees → manager in same department (or fallback to super manager)
+    await Promise.all(
+      workers.map((emp) => {
+        const deptManagers = managersByDept[emp.department];
+        const managerId = deptManagers?.length
+          ? faker.helpers.arrayElement(deptManagers)
+          : superManager.id;
+        return emp.update({ managerId });
+      })
+    );
+
+    console.log('✅ Hierarchy established by department.');
+
+    // Create Time Logs
+    const timeLogsData: any[] = [];
+    for (const emp of createdEmployees) {
+      const logCount = faker.number.int({ min: 5, max: 10 });
+      for (let i = 0; i < logCount; i++) {
+        const date = faker.date.recent({ days: 14 });
+        const inTime = new Date(
+          date.setHours(
+            faker.number.int({ min: 7, max: 9 }),
+            faker.number.int({ min: 0, max: 59 }),
+            0
+          )
+        );
+        const outTime = new Date(inTime);
+        outTime.setHours(inTime.getHours() + faker.number.int({ min: 6, max: 9 }));
+
+        timeLogsData.push(
+          { employeeId: emp.id, clockTime: inTime, eventType: 'IN' },
+          { employeeId: emp.id, clockTime: outTime, eventType: 'OUT' }
+        );
+      }
+    }
+    await TimeLog.bulkCreate(timeLogsData);
+    console.log(`🕒 Seeded ${timeLogsData.length} time logs.`);
+
+    // Create Leave Requests
+    const leaveRequestsData: any[] = [];
+    const approvers = [superManager, ...managers];
+
+    for (const emp of createdEmployees.slice(0, 15)) {
+      const type = faker.helpers.arrayElement(['vacation', 'sick']);
+      const start = faker.date.recent({ days: 20 });
+      const end = new Date(start);
+      end.setDate(start.getDate() + faker.number.int({ min: 1, max: 5 }));
+
+      leaveRequestsData.push({
+        employeeId: emp.id,
+        type,
+        startDate: truncateDate(start),
+        endDate: truncateDate(end),
+        approvedBy: faker.helpers.arrayElement(approvers).id,
+        approvedStatus: faker.helpers.arrayElement(['pending', 'approved', 'denied']),
+        note: faker.lorem.sentence(),
+      });
+    }
+
+    await LeaveRequest.bulkCreate(leaveRequestsData);
+    console.log(`📅 Seeded ${leaveRequestsData.length} leave requests.`);
+
+    // Summary Log for Debugging
+    console.log('\n📊 === Hierarchy Summary ===');
+    for (const dept of DEPARTMENTS) {
+      const mgrs = createdEmployees.filter(
+        (e) => e.role === 'manager' && e.department === dept
+      );
+      const emps = createdEmployees.filter(
+        (e) => e.role === 'employee' && e.department === dept
+      );
+      const hrsInDept = createdEmployees.filter(
+        (e) => e.role === 'hr' && e.department === dept
+      );
+      console.log(
+        `${dept}: ${mgrs.length} managers, ${hrsInDept.length} HR, ${emps.length} employees`
+      );
+    }
+
+    console.log('\n✅ Seeding complete.');
+  } catch (error) {
+    console.error('❌ Error during seeding:', error);
   } finally {
     await sequelize.close();
-    console.log('db connection closed');
+    console.log('🔒 Database connection closed.');
   }
 }
 
