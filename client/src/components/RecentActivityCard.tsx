@@ -49,49 +49,50 @@ export function RecentActivityCard({ employeeId }: RecentActivityCardProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchRecentActivity() {
+      setLoading(true);
+      setError(null);
       try {
-        // Instead of daily, let's get the most recent entries
-        const response = await fetch(`http://localhost:5000/api/timeLogs/employee/${employeeId}`);
+        // use relative path so dev proxy works
+        const response = await fetch(`/api/timeLogs/employee/${employeeId}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch recent activity');
+          const text = await response.text();
+          throw new Error(text || `Server returned ${response.status}`);
         }
 
         const timeLogs: TimeLog[] = await response.json();
-        console.log('Fetched time logs:', timeLogs); // Debug log
-        
-        // Convert time logs to activity items and sort by most recent first
-        const activityItems = timeLogs
-          .map(log => {
-            console.log('Processing log:', log); // Debug log
-            return {
-              action: formatEventType(log.eventType),
-              details: '', // Could add more context here if needed
-              time: formatTime(log.clockTime)
-            };
-          })
-          .sort((a, b) => {
-            try {
-              const timeA = new Date(a.time).getTime();
-              const timeB = new Date(b.time).getTime();
-              return timeB - timeA;
-            } catch (error) {
-              console.error('Error sorting times:', error);
-              return 0;
-            }
-          })
-          .slice(0, 5); // Show only the 5 most recent activities
+
+        if (!mounted) return;
+
+        // Sort logs by clockTime descending (most recent first)
+        timeLogs.sort((a, b) => new Date(b.clockTime).getTime() - new Date(a.clockTime).getTime());
+
+        const activityItems = timeLogs.slice(0, 5).map((log) => ({
+          action: formatEventType(log.eventType),
+          details: '',
+          time: formatTime(log.clockTime),
+        }));
 
         setActivities(activityItems);
       } catch (err) {
         console.error('Error fetching recent activity:', err);
         setError(err instanceof Error ? err.message : 'Failed to load recent activity');
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
     fetchRecentActivity();
+
+    const onChange = () => { fetchRecentActivity(); };
+    window.addEventListener('timeLogChanged', onChange as EventListener);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('timeLogChanged', onChange as EventListener);
+    };
   }, [employeeId]);
 
   return (

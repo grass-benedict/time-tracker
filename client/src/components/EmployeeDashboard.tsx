@@ -25,6 +25,8 @@ interface EmployeeAPI {
   username: string;
   vacationDays: number;
   flexAccount: number;
+  vacationDaysUsed?: number;
+  vacationDaysPending?: number;
   role?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -85,11 +87,14 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
   if (mounted) setEmployee(emp);
         // Map available fields into the vacation UI. If you have real used/pending fields,
         // update this mapping accordingly.
+        const total = emp.vacationDays ?? 0;
+        const used = emp.vacationDaysUsed ?? 0;
+        const pending = emp.vacationDaysPending ?? 0;
         const mapped: VacationData = {
-          total: emp.vacationDays ?? 0,
-          used: 0,
-          pending: 0,
-          remaining: emp.vacationDays ?? 0,
+          total,
+          used,
+          pending,
+          remaining: Math.max(0, total - used),
         };
         if (mounted) {
           setVacationData(mapped);
@@ -134,8 +139,8 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
 
       {/* Main Clock In Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SimpleClockInCard />
-        <ClockDisplayCard />
+        <SimpleClockInCard employeeId={employeeId} />
+        <ClockDisplayCard employeeId={employeeId} />
       </div>
 
       {/* Three Cards Section */}
@@ -144,7 +149,7 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
           flexAccount={employee?.flexAccount ?? 0}
           loading={loadingEmployee}
         />
-        <MonthSummaryCard />
+        <MonthSummaryCard employeeId={employeeId} />
         <RecentActivityCard employeeId={employeeId} />
       </div>
 
