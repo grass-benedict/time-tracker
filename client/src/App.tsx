@@ -18,6 +18,8 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<UserRole>('employee');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const currentUserID = 1; // Placeholder for current logged-in user ID
+
   const handleLogin = (role: UserRole) => {
     setActiveRole(role);
     setIsAuthenticated(true);
@@ -157,7 +159,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {activeRole === 'employee' && <EmployeeDashboard />}
+  {activeRole === 'employee' && <EmployeeDashboard employeeId={currentUserID} />}
         {activeRole === 'supervisor' && <SupervisorDashboard />}
         {activeRole === 'hr' && <HRDashboard />}
         {activeRole === 'department-calendar' && <DepartmentCalendarView />}
