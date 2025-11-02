@@ -145,7 +145,7 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
           loading={loadingEmployee}
         />
         <MonthSummaryCard />
-        <RecentActivityCard />
+        <RecentActivityCard employeeId={employeeId} />
       </div>
 
       {/* Time Edit Calendar - NEW: Click to edit time entries */}

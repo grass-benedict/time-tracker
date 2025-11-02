@@ -18,7 +18,7 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<UserRole>('employee');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const currentUserID = 1; // Placeholder for current logged-in user ID
+  const currentUserID = 2; // Placeholder for current logged-in user ID
 
   const handleLogin = (role: UserRole) => {
     setActiveRole(role);
@@ -165,11 +165,12 @@ export default function App() {
         {activeRole === 'department-calendar' && <DepartmentCalendarView />}
         
         {/* API Testing Interface (only shown in development) */}
+        {/* 
         {import.meta.env.DEV && (
           <div className="mt-8 border-t border-border pt-8">
             <APITest />
           </div>
-        )}
+        )} */}
       </main>
 
       {/* Footer */}
