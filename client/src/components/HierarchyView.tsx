@@ -34,6 +34,7 @@ export function HierarchyView() {
   const [selectedSupervisor, setSelectedSupervisor] = useState<Supervisor | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [supervisors, setSupervisors] = useState<Supervisor[]>(emptySupervisors);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -99,7 +100,9 @@ export function HierarchyView() {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {supervisors.map((supervisor) => (
+            {(() => {
+              const visible = showAll ? supervisors : supervisors.slice(0, 6);
+              return visible.map((supervisor) => (
               <button
                 key={supervisor.id}
                 onClick={() => handleSupervisorClick(supervisor)}
@@ -134,8 +137,16 @@ export function HierarchyView() {
                   </div>
                 </div>
               </button>
-            ))}
+              ));
+            })()}
           </div>
+          {supervisors.length > 6 && (
+            <div className="mt-4 text-center">
+              <Button variant="ghost" onClick={() => setShowAll(s => !s)}>
+                {showAll ? `Show less` : `Show all (${supervisors.length})`}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
