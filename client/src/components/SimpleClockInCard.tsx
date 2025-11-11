@@ -21,6 +21,57 @@ export function SimpleClockInCard({ employeeId }: { employeeId?: number }) {
     }
   }, [status]);
 
+  // On mount: check server for any open IN time log for this employee so the timer can persist
+  useEffect(() => {
+    let mounted = true;
+    const checkOpenClock = async () => {
+      if (!employeeId) return;
+      try {
+        const res = await fetch(`/api/timeLogs/employee/${employeeId}`);
+        if (!res.ok) return;
+        const logs = await res.json();
+        // logs expected to be array ordered by clockTime asc or desc; we'll sort to be safe
+        const sorted = Array.isArray(logs) ? logs.slice().sort((a: any, b: any) => new Date(a.clockTime).getTime() - new Date(b.clockTime).getTime()) : [];
+
+        // Pair IN/OUT; find any IN without a matching OUT after it (open IN)
+        const stack: any[] = [];
+        for (const l of sorted) {
+          if (l.eventType === 'IN') stack.push(l);
+          else if (l.eventType === 'OUT') {
+            if (stack.length > 0) stack.pop();
+          }
+        }
+
+        if (mounted && stack.length > 0) {
+          const openIn = stack[stack.length - 1];
+          const start = new Date(openIn.clockTime).getTime();
+          const now = Date.now();
+          const seconds = Math.max(0, Math.floor((now - start) / 1000));
+          setStatus('working');
+          setWorkTime(seconds);
+        }
+      } catch (err) {
+        // silent - server might be unreachable during development
+        console.error('Failed to check open clock', err);
+      }
+    };
+
+    checkOpenClock();
+
+    // Re-check when time logs change elsewhere in the app
+    const onTimeLogChanged = (e: any) => {
+      if (!employeeId) return;
+      const detailEmp = e?.detail?.employeeId ?? null;
+      if (detailEmp == null || detailEmp === employeeId) checkOpenClock();
+    };
+    window.addEventListener('timeLogChanged', onTimeLogChanged as EventListener);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('timeLogChanged', onTimeLogChanged as EventListener);
+    };
+  }, [employeeId]);
+
   // Timer effect for break time
   useEffect(() => {
     if (status === 'on-break') {
