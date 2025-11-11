@@ -160,7 +160,7 @@ export default function App() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
   {activeRole === 'employee' && <EmployeeDashboard employeeId={currentUserID} />}
-        {activeRole === 'supervisor' && <SupervisorDashboard />}
+  {activeRole === 'supervisor' && <SupervisorDashboard managerId={currentUserID} />}
         {activeRole === 'hr' && <HRDashboard employeeId={currentUserID}/>}
         {activeRole === 'department-calendar' && <DepartmentCalendarView />}
         

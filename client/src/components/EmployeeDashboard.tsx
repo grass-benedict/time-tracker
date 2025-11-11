@@ -9,7 +9,7 @@ import { StandaloneVacationRequest } from './StandaloneVacationRequest';
 import { ProjectTimeEntry } from './ProjectTimeEntry';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 type VacationData = {
   total: number;
@@ -33,16 +33,7 @@ interface EmployeeAPI {
 }
 
 
-const upcomingVacations = [
-  { id: 1, startDate: '2025-11-15', endDate: '2025-11-20', status: 'approved', days: 4 },
-  { id: 2, startDate: '2025-12-23', endDate: '2026-01-02', status: 'pending', days: 7 },
-];
-
-const recentTimeEntries = [
-  { date: '2025-10-24', start: '08:30', end: '17:15', total: '8.75h' },
-  { date: '2025-10-23', start: '08:15', end: '16:45', total: '8.50h' },
-  { date: '2025-10-22', start: '09:00', end: '18:00', total: '9.00h' },
-];
+// recentTimeEntries and upcomingVacations removed; panels consolidated elsewhere
 
 export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
   const today = new Date();
@@ -188,60 +179,11 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
 
       {/* Standalone Vacation Request - Dedicated section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <StandaloneVacationRequest />
+        <StandaloneVacationRequest employeeId={employeeId} />
         <ProjectTimeEntry />
       </div>
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Recent Time Entries
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentTimeEntries.map((entry, index) => (
-                <div key={index} className="flex justify-between items-center py-2 border-b last:border-0">
-                  <div>
-                    <div>{entry.date}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {entry.start} - {entry.end}
-                    </div>
-                  </div>
-                  <div>{entry.total}</div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Upcoming Vacations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {upcomingVacations.map((vacation) => (
-                <div key={vacation.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                  <div>
-                    <div>{vacation.startDate} to {vacation.endDate}</div>
-                    <div className="text-sm text-muted-foreground">{vacation.days} days</div>
-                  </div>
-                  <Badge variant={vacation.status === 'approved' ? 'default' : 'secondary'}>
-                    {vacation.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* recent activity and upcoming vacations removed (consolidated in other components) */}
     </div>
   );
 }

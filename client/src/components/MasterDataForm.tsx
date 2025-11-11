@@ -104,7 +104,7 @@ export function MasterDataForm() {
 
         <div className="space-y-2">
           <Label>Department</Label>
-          <Select value={formData.department} onValueChange={(value) => handleChange('department', value)}>
+          <Select value={formData.department} onValueChange={(value: string) => handleChange('department', value)}>
             <SelectTrigger>
               <SelectValue placeholder="Select department" />
             </SelectTrigger>
@@ -120,7 +120,7 @@ export function MasterDataForm() {
 
         <div className="space-y-2">
           <Label>Supervisor</Label>
-          <Select value={formData.supervisor} onValueChange={(value) => handleChange('supervisor', value)}>
+          <Select value={formData.supervisor} onValueChange={(value: string) => handleChange('supervisor', value)}>
             <SelectTrigger>
               <SelectValue placeholder="Select supervisor" />
             </SelectTrigger>

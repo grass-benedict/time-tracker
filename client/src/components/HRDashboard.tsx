@@ -5,7 +5,7 @@ import { HierarchyView } from './HierarchyView';
 import EmployeeMasterTable from './EmployeeMasterTable';
 
 
-export function HRDashboard() {
+export function HRDashboard({ employeeId }: { employeeId: number }) {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">

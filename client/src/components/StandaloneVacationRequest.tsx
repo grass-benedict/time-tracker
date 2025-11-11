@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -6,26 +6,92 @@ import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { CalendarIcon, Plane } from 'lucide-react';
 import { format } from 'date-fns';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 
-const upcomingVacations = [
-  { id: 1, startDate: '2025-11-15', endDate: '2025-11-20', status: 'approved', days: 4 },
-  { id: 2, startDate: '2025-12-23', endDate: '2026-01-02', status: 'pending', days: 7 },
-];
+// upcoming vacations are loaded from the server into `upcoming`
 
-export function StandaloneVacationRequest() {
-  const [startDate, setStartDate] = useState<Date>();
-  const [endDate, setEndDate] = useState<Date>();
+export function StandaloneVacationRequest({ employeeId }: { employeeId?: number }) {
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [upcoming, setUpcoming] = useState<Array<any>>([]);
 
-  const handleSubmit = () => {
+  const fetchUpcoming = async () => {
+    if (!employeeId) return;
+    try {
+      const res = await fetch(`/api/leaveRequests/employee/${employeeId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setUpcoming(data.map((r: any) => ({
+        id: r.id,
+        startDate: new Date(r.startDate).toISOString().slice(0,10),
+        endDate: new Date(r.endDate).toISOString().slice(0,10),
+        status: r.approvedStatus,
+        days: Math.ceil((new Date(r.endDate).getTime() - new Date(r.startDate).getTime()) / (1000*60*60*24)) + 1,
+      })));
+    } catch (err) {
+      console.error('Failed to load upcoming vacations', err);
+    }
+  };
+
+  // load upcoming when employeeId changes
+  useEffect(() => {
+    fetchUpcoming();
+  }, [employeeId]);
+
+  const handleSubmit = async () => {
     if (!startDate || !endDate) {
       toast.error('Please select both start and end dates');
       return;
     }
-    toast.success('Vacation request submitted for approval');
-    setStartDate(undefined);
-    setEndDate(undefined);
+    if (endDate < startDate) {
+      toast.error('End date cannot be before start date');
+      return;
+    }
+    if (!employeeId) {
+      toast.error('No employee selected');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // fetch employee to get managerId for approvedBy
+      const empRes = await fetch(`/api/employee/${employeeId}`);
+      if (!empRes.ok) throw new Error('Failed to fetch employee');
+      const emp = await empRes.json();
+      const managerId = emp.managerId ?? null;
+
+      const body = {
+        employeeId,
+        type: 'vacation',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        approvedBy: managerId,
+      } as any;
+
+      const res = await fetch('/api/leaveRequests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to create leave request');
+      }
+
+      toast.success('Vacation request submitted for approval');
+      setStartDate(undefined);
+      setEndDate(undefined);
+      await fetchUpcoming();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Submit vacation failed', msg);
+      toast.error('Failed to submit vacation request');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -87,6 +153,7 @@ export function StandaloneVacationRequest() {
           <Button 
             onClick={handleSubmit} 
             className="w-full h-11"
+            disabled={loading}
           >
             <Plane className="mr-2 h-4 w-4" />
             Submit Vacation Request
@@ -97,7 +164,7 @@ export function StandaloneVacationRequest() {
         <div>
           <h4 className="mb-3">Upcoming Vacations</h4>
           <div className="space-y-3">
-            {upcomingVacations.map((vacation) => (
+            {upcoming.length > 0 ? upcoming.map((vacation: any) => (
               <div 
                 key={vacation.id} 
                 className="p-4 bg-card border border-border rounded-lg hover:bg-accent/50 transition-all"
@@ -118,7 +185,9 @@ export function StandaloneVacationRequest() {
                   </Badge>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-sm text-muted-foreground">No upcoming vacations</div>
+            )}
           </div>
         </div>
       </CardContent>

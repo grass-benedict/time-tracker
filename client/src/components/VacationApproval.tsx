@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -6,69 +6,152 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Check, X } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface VacationRequest {
   id: string;
+  employeeId: number;
   employeeName: string;
   startDate: string;
   endDate: string;
   days: number;
-  status: 'pending' | 'approved' | 'rejected';
+  approvedBy?: number | null;
+  approvedStatus: 'pending' | 'approved' | 'denied';
+  note?: string | null;
 }
 
-const mockRequests: VacationRequest[] = [
-  {
-    id: '1',
-    employeeName: 'Anna Schmidt',
-    startDate: '2025-11-10',
-    endDate: '2025-11-14',
-    days: 5,
-    status: 'pending',
-  },
-  {
-    id: '2',
-    employeeName: 'Michael Weber',
-    startDate: '2025-12-20',
-    endDate: '2025-12-27',
-    days: 6,
-    status: 'pending',
-  },
-  {
-    id: '3',
-    employeeName: 'Lisa Müller',
-    startDate: '2025-11-25',
-    endDate: '2025-11-29',
-    days: 5,
-    status: 'pending',
-  },
-];
-
-export function VacationApproval() {
+export function VacationApproval({ managerId }: { managerId?: number | undefined }) {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<{ id: string; name: string } | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [requests, setRequests] = useState<VacationRequest[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleApprove = (id: string, name: string) => {
-    toast.success(`Vacation approved for ${name}`);
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!managerId) return;
+      setLoading(true);
+      try {
+        // fetch pending requests and filter by approvedBy (manager)
+        const res = await fetch('/api/leaveRequests?status=pending');
+        if (!res.ok) throw new Error(`Failed to fetch leave requests: ${res.status}`);
+        const data: any[] = await res.json();
+        const pending = data.filter((r) => r.approvedBy === managerId && r.approvedStatus === 'pending');
+
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const calcDays = (startRaw: any, endRaw: any, fallback = 0) => {
+          try {
+            const s = new Date(startRaw);
+            const e = new Date(endRaw);
+            if (isNaN(s.getTime()) || isNaN(e.getTime())) return fallback;
+            // inclusive days: difference in days + 1
+            const diff = Math.round((e.getTime() - s.getTime()) / msPerDay) + 1;
+            return diff >= 0 ? diff : fallback;
+          } catch {
+            return fallback;
+          }
+        };
+
+        // initial mapping; leave employeeName undefined when not provided so we can fetch it
+        let mapped = pending.map((r) => {
+          const days = calcDays(r.startDate, r.endDate, r.days ?? 0);
+          const startDateStr = r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : String(r.startDate ?? '');
+          const endDateStr = r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : String(r.endDate ?? '');
+          return {
+            id: String(r.id),
+            employeeId: r.employeeId,
+            employeeName: r.employeeName ?? undefined,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            days,
+            approvedBy: r.approvedBy,
+            approvedStatus: r.approvedStatus ?? 'pending',
+            note: r.note ?? null,
+          } as VacationRequest;
+        });
+
+        // fetch names for any entries missing employeeName
+        const idsToFetch = Array.from(new Set(mapped.filter((m) => !m.employeeName).map((m) => m.employeeId)));
+        if (idsToFetch.length > 0) {
+          const nameMap: Record<number, string> = {};
+          await Promise.all(
+            idsToFetch.map(async (id) => {
+              try {
+                const rres = await fetch(`/api/employee/${id}`);
+                if (!rres.ok) return;
+                const emp = await rres.json();
+                nameMap[id] = `${emp.name}${emp.surname ? ' ' + emp.surname : ''}`;
+              } catch (e) {
+                // ignore individual failures
+              }
+            })
+          );
+
+          mapped = mapped.map((m) => ({
+            ...m,
+            employeeName: m.employeeName ?? nameMap[m.employeeId] ?? `Employee ${m.employeeId}`,
+          }));
+        }
+
+        if (mounted) setRequests(mapped);
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not load vacation requests');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [managerId]);
+
+  const handleApprove = async (req: VacationRequest) => {
+    try {
+      const res = await fetch(`/api/leaveRequests/${req.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvedStatus: 'approved' }),
+      });
+      if (!res.ok) throw new Error(`Failed to approve: ${res.status}`);
+      setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      toast.success(`Vacation approved for ${req.employeeName}`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not approve vacation request');
+    }
   };
 
-  const openRejectModal = (id: string, name: string) => {
-    setSelectedRequest({ id, name });
+  const openRejectModal = (req: VacationRequest) => {
+    setSelectedRequest(req);
     setRejectionReason('');
     setIsRejectModalOpen(true);
   };
 
-  const handleRejectSubmit = () => {
+  const handleRejectSubmit = async () => {
     if (!rejectionReason.trim()) {
       toast.error('Please provide a rejection reason');
       return;
     }
-    if (selectedRequest) {
-      toast.error(`Vacation rejected for ${selectedRequest.name}: ${rejectionReason}`);
+    if (!selectedRequest) return;
+    try {
+      const res = await fetch(`/api/leaveRequests/${selectedRequest.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvedStatus: 'denied', note: rejectionReason }),
+      });
+      if (!res.ok) throw new Error(`Failed to reject: ${res.status}`);
+      setRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
+      toast.success(`Vacation rejected for ${selectedRequest.employeeName}`);
       setIsRejectModalOpen(false);
       setSelectedRequest(null);
       setRejectionReason('');
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not reject vacation request');
     }
   };
 
@@ -83,7 +166,7 @@ export function VacationApproval() {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="space-y-4">
-            {mockRequests.map((request) => (
+            {requests.map((request) => (
               <div key={request.id} className="p-5 border rounded-lg space-y-3 bg-muted/30">
                 <div className="flex justify-between items-start">
                   <div>
@@ -92,7 +175,7 @@ export function VacationApproval() {
                       {request.startDate} to {request.endDate}
                     </div>
                   </div>
-                  <Badge variant="secondary">{request.status}</Badge>
+                  <Badge variant="secondary">{request.approvedStatus}</Badge>
                 </div>
 
                 <div className="text-sm">
@@ -104,7 +187,7 @@ export function VacationApproval() {
                   <Button
                     size="sm"
                     className="flex-1"
-                    onClick={() => handleApprove(request.id, request.employeeName)}
+                    onClick={() => handleApprove(request)}
                   >
                     <Check className="h-4 w-4 mr-1" />
                     Approve
@@ -113,7 +196,7 @@ export function VacationApproval() {
                     size="sm"
                     variant="outline"
                     className="flex-1"
-                    onClick={() => openRejectModal(request.id, request.employeeName)}
+                    onClick={() => openRejectModal(request)}
                   >
                     <X className="h-4 w-4 mr-1" />
                     Reject
