@@ -42,52 +42,96 @@ async function seed() {
 
     console.log(`👑 Created super manager: ${superManager.name}`);
 
-    // Create more employees
-    const employeesData = Array.from({ length: 99 }).map(() => {
-      const firstName = faker.person.firstName();
-      const lastName = faker.person.lastName();
-      const username =
-        firstName.slice(0, 2).toLowerCase() +
-        lastName.slice(0, 2).toLowerCase() +
-        faker.number.int({ min: 10, max: 99 });
+    /* =========================================================
+       2️⃣ Create Regular Employees (Managers, HR, Staff)
+       ========================================================= */
+    const employeesData: any[] = [];
 
-      return {
-        name: firstName,
-        surname: lastName,
-        username,
+    for (const dept of DEPARTMENTS) {
+      const managerCount = faker.number.int({ min: 1, max: 3 });
+      const hrCount = 1; // one HR per dept
+      const staffCount = faker.number.int({ min: 8, max: 20 });
+
+      // Managers
+      for (let i = 0; i < managerCount; i++) {
+        const first = faker.person.firstName();
+        const last = faker.person.lastName();
+        employeesData.push({
+          name: first,
+          surname: last,
+          username:
+            first.slice(0, 2).toLowerCase() +
+            last.slice(0, 2).toLowerCase() +
+            faker.number.int({ min: 10, max: 99 }),
+          password: 'password123',
+          department: dept,
+          vacationDays: faker.number.int({ min: 20, max: 30 }),
+          vacationDaysUsed: faker.number.int({ min: 0, max: 10 }),
+          vacationDaysPending: faker.number.int({ min: 0, max: 5 }),
+          flexAccount: faker.number.float({ min: 0, max: 20, fractionDigits: 1 }),
+          flexMonthly: faker.number.float({ min: 0, max: 5, fractionDigits: 1 }),
+          role: 'manager',
+          hoursMonthly: 160,
+          hoursWorked: faker.number.float({ min: 100, max: 160, fractionDigits: 1 }),
+          managerId: null,
+        });
+      }
+
+      // HR (1 per dept)
+      const firstHR = faker.person.firstName();
+      const lastHR = faker.person.lastName();
+      employeesData.push({
+        name: firstHR,
+        surname: lastHR,
+        username:
+          firstHR.slice(0, 2).toLowerCase() +
+          lastHR.slice(0, 2).toLowerCase() +
+          faker.number.int({ min: 10, max: 99 }),
         password: 'password123',
-        department: faker.helpers.arrayElement(DEPARTMENTS),
+        department: dept,
         vacationDays: faker.number.int({ min: 20, max: 30 }),
         vacationDaysUsed: faker.number.int({ min: 0, max: 10 }),
         vacationDaysPending: faker.number.int({ min: 0, max: 5 }),
         flexAccount: faker.number.float({ min: 0, max: 20, fractionDigits: 1 }),
         flexMonthly: faker.number.float({ min: 0, max: 5, fractionDigits: 1 }),
-        role: faker.helpers.arrayElement(['employee', 'manager', 'hr']),
+        role: 'hr',
         hoursMonthly: 160,
         hoursWorked: faker.number.float({ min: 100, max: 160, fractionDigits: 1 }),
         managerId: null,
-      };
-    });
+      });
+
+      // Employees
+      for (let i = 0; i < staffCount; i++) {
+        const first = faker.person.firstName();
+        const last = faker.person.lastName();
+        employeesData.push({
+          name: first,
+          surname: last,
+          username:
+            first.slice(0, 2).toLowerCase() +
+            last.slice(0, 2).toLowerCase() +
+            faker.number.int({ min: 10, max: 99 }),
+          password: 'password123',
+          department: dept,
+          vacationDays: faker.number.int({ min: 20, max: 30 }),
+          vacationDaysUsed: faker.number.int({ min: 0, max: 10 }),
+          vacationDaysPending: faker.number.int({ min: 0, max: 5 }),
+          flexAccount: faker.number.float({ min: 0, max: 20, fractionDigits: 1 }),
+          flexMonthly: faker.number.float({ min: 0, max: 5, fractionDigits: 1 }),
+          role: 'employee',
+          hoursMonthly: 160,
+          hoursWorked: faker.number.float({ min: 100, max: 160, fractionDigits: 1 }),
+          managerId: null,
+        });
+      }
+    }
 
     const createdEmployees = await Employee.bulkCreate(employeesData, { returning: true });
     console.log(`👥 Seeded ${createdEmployees.length} employees.`);
 
-    // Making sure each department has at least 1 manager
-    for (const dept of DEPARTMENTS) {
-      const managersInDept = createdEmployees.filter(
-        (e) => e.role === 'manager' && e.department === dept
-      );
-
-      if (managersInDept.length === 0) {
-        const fallbackManager = faker.helpers.arrayElement(
-          createdEmployees.filter((e) => e.role === 'manager')
-        );
-        await fallbackManager.update({ department: dept });
-        console.log(`🛠️  Assigned ${fallbackManager.name} as manager for ${dept}`);
-      }
-    }
-
-    // Establishing hierarchy
+    /* =========================================================
+       3️⃣ Assign Hierarchies
+       ========================================================= */
     const managers = createdEmployees.filter((e) => e.role === 'manager');
     const hrs = createdEmployees.filter((e) => e.role === 'hr');
     const workers = createdEmployees.filter((e) => e.role === 'employee');
@@ -95,37 +139,39 @@ async function seed() {
     // Managers report to super admin
     await Promise.all(managers.map((m) => m.update({ managerId: superManager.id })));
 
-    // Build map of department → manager IDs
-    const managersByDept: Record<string, number[]> = {};
+    // Map department → managers
+    const managersByDept: Record<string, Employee[]> = {};
     for (const m of managers) {
-      (managersByDept[m.department] ??= []).push(m.id);
+      (managersByDept[m.department] ??= []).push(m);
     }
 
-    // HR → HR manager or super manager
+    // HR → any manager in same department (or super admin)
     await Promise.all(
       hrs.map((hr) => {
-        const hrManagers = managersByDept['HR'];
-        const managerId = hrManagers?.length
-          ? faker.helpers.arrayElement(hrManagers)
-          : superManager.id;
-        return hr.update({ managerId });
-      })
-    );
-
-    // Employees → manager in same department (or fallback to super manager)
-    await Promise.all(
-      workers.map((emp) => {
-        const deptManagers = managersByDept[emp.department];
-        const managerId = deptManagers?.length
+        const deptManagers = managersByDept[hr.department];
+        const manager = deptManagers
           ? faker.helpers.arrayElement(deptManagers)
-          : superManager.id;
-        return emp.update({ managerId });
+          : superManager;
+        return hr.update({ managerId: manager.id });
       })
     );
 
-    console.log('✅ Hierarchy established by department.');
+    // Employees → evenly distributed among managers in their department
+    for (const dept of DEPARTMENTS) {
+      const deptManagers = managersByDept[dept] ?? [superManager];
+      const deptEmployees = workers.filter((e) => e.department === dept);
 
-    // Create Time Logs
+      deptEmployees.forEach((emp, idx) => {
+        const manager = deptManagers[idx % deptManagers.length] ?? superManager;
+        emp.update({ managerId: manager.id });
+      });
+    }
+
+    console.log('✅ Hierarchy established and balanced by department.');
+
+    /* =========================================================
+       4️⃣ Create Time Logs
+       ========================================================= */
     const timeLogsData: any[] = [];
     for (const emp of createdEmployees) {
       const logCount = faker.number.int({ min: 5, max: 10 });
@@ -150,7 +196,9 @@ async function seed() {
     await TimeLog.bulkCreate(timeLogsData);
     console.log(`🕒 Seeded ${timeLogsData.length} time logs.`);
 
-    // Create Leave Requests
+    /* =========================================================
+       5️⃣ Create Leave Requests
+       ========================================================= */
     const leaveRequestsData: any[] = [];
     const approvers = [superManager, ...managers];
 
@@ -174,7 +222,9 @@ async function seed() {
     await LeaveRequest.bulkCreate(leaveRequestsData);
     console.log(`📅 Seeded ${leaveRequestsData.length} leave requests.`);
 
-    // Summary Log for Debugging
+    /* =========================================================
+       6️⃣ Summary for Debugging
+       ========================================================= */
     console.log('\n📊 === Hierarchy Summary ===');
     for (const dept of DEPARTMENTS) {
       const mgrs = createdEmployees.filter(
