@@ -19,8 +19,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const currentUserID = 2; // Placeholder for current logged-in user ID
+  const [currentUserID, setCurrentUserID] = useState<number>(2); // Will be set on login
 
   // Fetch user role from database
   useEffect(() => {
@@ -53,8 +52,8 @@ export default function App() {
     return () => { mounted = false; };
   }, [isAuthenticated, currentUserID]);
 
-  const handleLogin = (role: UserRole) => {
-    setActiveRole(role);
+  const handleLogin = (employeeId: number) => {
+    setCurrentUserID(employeeId);
     setIsAuthenticated(true);
   };
 
@@ -63,6 +62,7 @@ export default function App() {
     setSidebarOpen(false);
     setUserRole(null);
     setActiveRole('employee');
+    setCurrentUserID(2); // Reset to default
   };
 
   // Check if user has permission for a menu item
