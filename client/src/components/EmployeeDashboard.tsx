@@ -144,8 +144,8 @@ export function EmployeeDashboard({ employeeId }: { employeeId: number }) {
         <RecentActivityCard employeeId={employeeId} />
       </div>
 
-      {/* Time Edit Calendar - NEW: Click to edit time entries */}
-      <TimeEditCalendar />
+  {/* Time Edit Calendar - NEW: Click to edit time entries */}
+  <TimeEditCalendar employeeId={employeeId} />
 
       {/* Vacation Status */}
       <Card>

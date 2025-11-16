@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -7,18 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
-const departments = [
-  { id: '1', name: 'Engineering' },
-  { id: '2', name: 'Sales' },
-  { id: '3', name: 'Marketing' },
-  { id: '4', name: 'HR' },
-];
+// Departments mirror server enum in models/employee.ts
+const DEPARTMENTS = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations', 'Executive'];
 
-const supervisors = [
-  { id: '1', name: 'Harald Schmidt' },
-  { id: '2', name: 'Maria Weber' },
-  { id: '3', name: 'Klaus Müller' },
-];
+type SupervisorOption = { id: number; name: string };
 
 export function MasterDataForm() {
   const [formData, setFormData] = useState({
@@ -31,23 +23,109 @@ export function MasterDataForm() {
     weeklyHours: '40',
     vacationDays: '30',
   });
+  const [supervisors, setSupervisors] = useState<SupervisorOption[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/employee');
+        if (!res.ok) throw new Error(`Failed to load employees: ${res.status}`);
+        const data = await res.json();
+        if (!mounted) return;
+        // supervisors are employees with role === 'manager'
+        const mgrs: SupervisorOption[] = data
+          .filter((e: any) => e.role === 'manager')
+          .map((e: any) => ({ id: e.id, name: `${e.name}${e.surname ? ' ' + e.surname : ''}` }));
+        setSupervisors(mgrs);
+
+        // compute next employee id default
+        const maxId = data.reduce((acc: number, e: any) => Math.max(acc, Number(e.id ?? 0)), 0);
+        const next = maxId + 1;
+        setFormData((prev) => ({ ...prev, employeeId: String(next) }));
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not load supervisors');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleSubmit = async () => {
     if (!formData.firstName || !formData.lastName || !formData.email) {
       toast.error('Please fill in required fields');
       return;
     }
-    toast.success('Employee created successfully');
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      employeeId: '',
-      department: '',
-      supervisor: '',
-      weeklyHours: '40',
-      vacationDays: '30',
-    });
+
+    const payload: any = {
+      name: formData.firstName,
+      surname: formData.lastName,
+      username: formData.email.split('@')[0],
+      password: 'password123',
+      vacationDays: Number(formData.vacationDays) || 25,
+      flexAccount: 0,
+      role: 'employee',
+      flexMonthly: null,
+      vacationDaysUsed: 0,
+      vacationDaysPending: 0,
+      hoursMonthly: Number(formData.weeklyHours) * 4 || 160,
+      hoursWorked: 0,
+      department: formData.department || undefined,
+      managerId: formData.supervisor ? Number(formData.supervisor) : null,
+    };
+
+    // If user provided an employeeId that's a number, include it to allow explicit id
+    const explicitId = Number(formData.employeeId);
+    if (!isNaN(explicitId) && explicitId > 0) payload.id = explicitId;
+
+    try {
+      const res = await fetch('/api/employee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Failed to create employee: ${res.status}`);
+      }
+      const created = await res.json();
+      toast.success('Employee created successfully');
+
+      // reset form and set next id
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        employeeId: String((explicitId || Number(created.id) || 0) + 1),
+        department: '',
+        supervisor: '',
+        weeklyHours: '40',
+        vacationDays: '30',
+      });
+
+      // refresh supervisors list in case a manager was added
+      try {
+        const r = await fetch('/api/employee');
+        if (r.ok) {
+          const data = await r.json();
+          const mgrs: SupervisorOption[] = data
+            .filter((e: any) => e.role === 'manager')
+            .map((e: any) => ({ id: e.id, name: `${e.name}${e.surname ? ' ' + e.surname : ''}` }));
+          setSupervisors(mgrs);
+        }
+      } catch {}
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Failed to create employee');
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -109,9 +187,9 @@ export function MasterDataForm() {
               <SelectValue placeholder="Select department" />
             </SelectTrigger>
             <SelectContent>
-              {departments.map((dept) => (
-                <SelectItem key={dept.id} value={dept.id}>
-                  {dept.name}
+              {DEPARTMENTS.map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -126,7 +204,7 @@ export function MasterDataForm() {
             </SelectTrigger>
             <SelectContent>
               {supervisors.map((supervisor) => (
-                <SelectItem key={supervisor.id} value={supervisor.id}>
+                <SelectItem key={supervisor.id} value={String(supervisor.id)}>
                   {supervisor.name}
                 </SelectItem>
               ))}
@@ -154,7 +232,7 @@ export function MasterDataForm() {
           </div>
         </div>
 
-        <Button onClick={handleSubmit} className="w-full h-11">
+        <Button onClick={handleSubmit} className="w-full h-11" disabled={loading}>
           Create Employee
         </Button>
       </CardContent>

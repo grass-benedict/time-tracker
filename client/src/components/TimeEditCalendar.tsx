@@ -1,60 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Badge } from './ui/badge';
 
 interface TimeEntry {
   id: string;
   type: 'work' | 'break';
-  start: string;
-  end: string;
+  start: string; // HH:MM or ISO
+  end?: string | null; // HH:MM or ISO, optional for running timers
 }
 
 interface DayData {
-  date: string;
+  date: string; // YYYY-MM-DD
   entries: TimeEntry[];
   totalHours: number;
 }
 
-const mockWorkData: Record<string, DayData> = {
-  '2025-10-20': {
-    date: '2025-10-20',
-    entries: [
-      { id: '1', type: 'work', start: '08:00', end: '12:00' },
-      { id: '2', type: 'break', start: '12:00', end: '12:30' },
-      { id: '3', type: 'work', start: '12:30', end: '17:00' },
-    ],
-    totalHours: 8.5,
-  },
-  '2025-10-21': {
-    date: '2025-10-21',
-    entries: [
-      { id: '1', type: 'work', start: '09:00', end: '13:00' },
-      { id: '2', type: 'break', start: '13:00', end: '14:00' },
-      { id: '3', type: 'work', start: '14:00', end: '18:00' },
-    ],
-    totalHours: 8.0,
-  },
-  '2025-10-22': {
-    date: '2025-10-22',
-    entries: [
-      { id: '1', type: 'work', start: '08:30', end: '17:30' },
-      { id: '2', type: 'break', start: '12:30', end: '13:00' },
-    ],
-    totalHours: 8.5,
-  },
-};
+// We'll store fetched data here keyed by YYYY-MM-DD
+const initialWorkData: Record<string, DayData> = {};
 
-export function TimeEditCalendar() {
+export function TimeEditCalendar({ employeeId }: { employeeId?: number }) {
   const [currentMonth, setCurrentMonth] = useState(new Date(2025, 9)); // October 2025
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEntries, setEditingEntries] = useState<TimeEntry[]>([]);
+  const [workData, setWorkData] = useState<Record<string, DayData>>(initialWorkData);
+  const [loading, setLoading] = useState(false);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -82,21 +59,77 @@ export function TimeEditCalendar() {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     setSelectedDate(clickedDate);
-    
-    // Load existing entries or create empty array
-    if (mockWorkData[dateStr]) {
-      setEditingEntries([...mockWorkData[dateStr].entries]);
+
+    // Load existing entries for the day (prefer fresh daily fetch to ensure inputs get HH:MM format)
+    if (employeeId) {
+      fetchDailyEntries(employeeId, dateStr).then(entries => {
+        setEditingEntries(entries.length ? entries : []);
+      }).catch(() => setEditingEntries([]));
     } else {
-      setEditingEntries([]);
+      // fallback to preloaded month data
+      if (workData[dateStr]) {
+        setEditingEntries([...workData[dateStr].entries]);
+      } else {
+        setEditingEntries([]);
+      }
     }
-    
+
     setIsDialogOpen(true);
   };
 
   const getDataForDate = (day: number): DayData | null => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return mockWorkData[dateStr] || null;
+    return workData[dateStr] || null;
   };
+
+  // Fetch daily logs and return entries formatted for the editor
+  const fetchDailyEntries = async (id: number, dateKey: string): Promise<TimeEntry[]> => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/timeLogs/employee/${id}/daily?date=${dateKey}`);
+      if (!res.ok) return [];
+      const logs = await res.json();
+
+      // Sort ascending
+      logs.sort((a: any, b: any) => new Date(a.clockTime).getTime() - new Date(b.clockTime).getTime());
+
+      const entries: TimeEntry[] = [];
+      let i = 0;
+      while (i < logs.length) {
+        const rec = logs[i];
+        if (rec.eventType === 'IN') {
+          const inTime = rec.clockTime;
+          // find next OUT
+          let outRec = null;
+          for (let j = i + 1; j < logs.length; j++) {
+            if (logs[j].eventType === 'OUT') {
+              outRec = logs[j];
+              break;
+            }
+          }
+          const entry: TimeEntry = {
+            id: `${rec.id}-${outRec ? outRec.id : 'open'}`,
+            type: 'work',
+            start: formatTimeHHMM(inTime),
+            end: outRec ? formatTimeHHMM(outRec.clockTime) : '',
+          };
+          entries.push(entry);
+          if (outRec) {
+            i = logs.indexOf(outRec) + 1;
+          } else {
+            i += 1;
+          }
+        } else {
+          i += 1;
+        }
+      }
+      return entries;
+    } catch (err) {
+      console.error('Failed to fetch daily entries', err);
+      return [];
+    }
+  };
+  // Debug helper: log when daily entries are loaded (helps during QA)
+  // Note: will only print in browser console, not server
 
   const addEntry = () => {
     const newEntry: TimeEntry = {
@@ -121,11 +154,224 @@ export function TimeEditCalendar() {
   };
 
   const handleSaveEntries = () => {
-    if (!selectedDate) return;
-    
-    toast.success('Time entries updated successfully');
-    setIsDialogOpen(false);
+    if (!selectedDate || !employeeId) return;
+
+    (async () => {
+      const dateKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+
+      try {
+        // Load existing logs for the day
+        const res = await fetch(`http://localhost:5000/api/timeLogs/employee/${employeeId}/daily?date=${dateKey}`);
+        if (!res.ok) throw new Error(`Failed to load existing logs: ${res.status}`);
+        const existingLogs: any[] = await res.json();
+
+        // Helper maps
+        const existingById = new Map(existingLogs.map(l => [String(l.id), l]));
+
+        // Track referenced ids so we can delete leftovers
+        const referenced = new Set<string>();
+
+        // Process each edited entry
+        for (const entry of editingEntries) {
+          const parts = String(entry.id).split('-');
+          const inId = parts[0] && !isNaN(Number(parts[0])) ? String(parts[0]) : null;
+          const outId = parts[1] && !isNaN(Number(parts[1])) ? String(parts[1]) : null;
+
+          // Build ISO datetimes in local zone
+          const dateParts = dateKey.split('-');
+          const sy = Number(dateParts[0] ?? selectedDate.getFullYear());
+          const sm = Number(dateParts[1] ?? (selectedDate.getMonth() + 1));
+          const sd = Number(dateParts[2] ?? selectedDate.getDate());
+          const [sh = 0, smin = 0] = entry.start.split(':').map(v => Number(v));
+          const inDate = new Date(sy, sm - 1, sd, Number.isFinite(sh) ? sh : 0, Number.isFinite(smin) ? smin : 0, 0);
+
+          // Create or update IN
+          if (inId && existingById.has(inId)) {
+            // update
+            await fetch(`http://localhost:5000/api/timeLogs/${inId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ clockTime: inDate.toISOString(), eventType: 'IN' }),
+            });
+            referenced.add(inId);
+          } else {
+            // create
+            const createRes = await fetch(`http://localhost:5000/api/timeLogs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ employeeId, clockTime: inDate.toISOString(), eventType: 'IN' }),
+            });
+            if (createRes.ok) {
+              const created = await createRes.json();
+              // update local id so future processing can reference it
+              // entry.id originally like Date.now() for new ones
+              const newInId = String(created.id);
+              // If entry had outId stored as 'open', keep format newInId-outId later when set
+              entry.id = outId ? `${newInId}-${outId}` : `${newInId}-open`;
+              referenced.add(newInId);
+            }
+          }
+
+          // Handle OUT
+          if (entry.end && entry.end.length > 0) {
+            const [eh = 0, emin = 0] = entry.end.split(':').map(v => Number(v));
+            const outDate = new Date(sy, sm - 1, sd, Number.isFinite(eh) ? eh : 0, Number.isFinite(emin) ? emin : 0, 0);
+
+            if (outId && existingById.has(outId)) {
+              await fetch(`http://localhost:5000/api/timeLogs/${outId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clockTime: outDate.toISOString(), eventType: 'OUT' }),
+              });
+              referenced.add(outId);
+            } else {
+              // create OUT
+              const createRes = await fetch(`http://localhost:5000/api/timeLogs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId, clockTime: outDate.toISOString(), eventType: 'OUT' }),
+              });
+              if (createRes.ok) {
+                const created = await createRes.json();
+                referenced.add(String(created.id));
+                // If entry previously had in id created above, patch entry.id to include new out id
+                const idParts = String(entry.id).split('-');
+                entry.id = `${idParts[0] ?? 'open'}-${created.id}`;
+              }
+            }
+          } else {
+            // No end provided. If there was an existing out log, delete it
+            if (outId && existingById.has(outId)) {
+              await fetch(`http://localhost:5000/api/timeLogs/${outId}`, { method: 'DELETE' });
+            }
+          }
+        }
+
+        // Delete any existing logs for the day that were not referenced
+        for (const l of existingLogs) {
+          const idStr = String(l.id);
+          if (!referenced.has(idStr)) {
+            // remove orphaned log
+            await fetch(`http://localhost:5000/api/timeLogs/${idStr}`, { method: 'DELETE' });
+          }
+        }
+
+        // Refresh calendar data for employee
+        await fetchTimeLogs(employeeId);
+
+        toast.success('Time entries saved');
+        setIsDialogOpen(false);
+      } catch (err) {
+        console.error('Failed to save time entries', err);
+        toast.error('Failed to save time entries');
+      }
+    })();
   };
+
+  // Helpers to format and compute day grouping from server time logs
+  const formatTimeHHMM = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const isoDate = (iso: string) => {
+    const d = new Date(iso);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Fetch time logs for the given employee and group into days
+  const fetchTimeLogs = async (id?: number) => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/timeLogs/employee/${id}`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const logs = await res.json();
+
+      // Expect logs to be array of { id, eventType: 'IN'|'OUT', clockTime }
+      // Group by date, pairing IN with next OUT
+      const byDate: Record<string, { entries: TimeEntry[]; totalHours: number }> = {};
+
+      // Sort logs by time
+      logs.sort((a: any, b: any) => new Date(a.clockTime).getTime() - new Date(b.clockTime).getTime());
+
+      let i = 0;
+      while (i < logs.length) {
+        const rec = logs[i];
+        if (rec.eventType === 'IN') {
+          const inTime = rec.clockTime;
+          // find next OUT after this IN
+          let outRec = null;
+          for (let j = i + 1; j < logs.length; j++) {
+            if (logs[j].eventType === 'OUT') {
+              outRec = logs[j];
+              break;
+            }
+          }
+
+          const dayKey = isoDate(inTime);
+          if (!byDate[dayKey]) byDate[dayKey] = { entries: [], totalHours: 0 };
+
+          const entry: TimeEntry = {
+            id: `${rec.id}-${outRec ? outRec.id : 'open'}`,
+            type: 'work',
+            start: formatTimeHHMM(inTime),
+            end: outRec ? formatTimeHHMM(outRec.clockTime) : null,
+          };
+
+          // compute duration if we have out
+          if (outRec) {
+            const startMs = new Date(inTime).getTime();
+            const endMs = new Date(outRec.clockTime).getTime();
+            const hours = Math.max(0, (endMs - startMs) / (1000 * 60 * 60));
+            byDate[dayKey].totalHours += hours;
+          }
+
+          byDate[dayKey].entries.push(entry);
+
+          // if we used an OUT, skip to the outRec index + 1, else just advance one
+          if (outRec) {
+            i = logs.indexOf(outRec) + 1;
+          } else {
+            i += 1;
+          }
+        } else {
+          // An OUT without a preceding IN — skip it
+          i += 1;
+        }
+      }
+
+      // Convert into DayData map
+      const dayMap: Record<string, DayData> = {};
+      for (const k of Object.keys(byDate)) {
+        const b = byDate[k]!;
+        dayMap[k] = { date: k, entries: b.entries, totalHours: Math.round(b.totalHours * 100) / 100 };
+      }
+
+      setWorkData(dayMap);
+    } catch (err) {
+      console.error('Failed to load time logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch when employeeId changes
+  useEffect(() => {
+    // fetch on mount or when the employeeId changes
+    fetchTimeLogs(employeeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employeeId]);
 
   const renderCalendar = () => {
     const days = [];
@@ -265,14 +511,15 @@ export function TimeEditCalendar() {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-2">
                           <Label>Type</Label>
-                          <select
-                            value={entry.type}
-                            onChange={(e) => updateEntry(entry.id, 'type', e.target.value)}
-                            className="w-full p-2 border rounded-lg bg-white"
-                          >
-                            <option value="work">Work</option>
-                            <option value="break">Break</option>
-                          </select>
+                          <Select value={entry.type} onValueChange={(val: string) => updateEntry(entry.id, 'type', val)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="work">Work</SelectItem>
+                              <SelectItem value="break">Break</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         
                         <div className="space-y-2">
@@ -288,7 +535,7 @@ export function TimeEditCalendar() {
                           <Label>End Time</Label>
                           <Input
                             type="time"
-                            value={entry.end}
+                            value={entry.end ?? ''}
                             onChange={(e) => updateEntry(entry.id, 'end', e.target.value)}
                           />
                         </div>
