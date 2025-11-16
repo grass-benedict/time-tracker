@@ -6,11 +6,11 @@ import { Users, Calendar, Clock, TrendingUp, Mail, Phone } from 'lucide-react';
 
 const initialStats = {
   totalEmployees: 0,
-  activeToday: 231,
-  onVacation: 16,
-  averageFlexBalance: 5.2,
-  pendingApprovals: 42,
-  sickLeaveToday: 8,
+  activeToday: 0,
+  onVacation: 0,
+  averageFlexBalance: 0,
+  pendingApprovals: 0,
+  sickLeaveToday: 0,
 };
 
 interface EmployeeMinimal {
@@ -75,6 +75,89 @@ export function SystemStatistics() {
     };
 
     fetchEmployees();
+  }, []);
+
+  // Fetch real-time statistics
+  useEffect(() => {
+    const fetchStatistics = async () => {
+      try {
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Fetch time logs to calculate "Active Today" (clocked in but not out)
+        const timeLogsRes = await fetch('/api/timeLogs');
+        if (timeLogsRes.ok) {
+          const timeLogs = await timeLogsRes.json();
+          
+          // Get today's logs
+          const todayLogs = timeLogs.filter((log: any) => {
+            const logDate = new Date(log.clockTime).toISOString().split('T')[0];
+            return logDate === todayStr;
+          });
+
+          // Group by employee and check if they're currently clocked in
+          const employeeStatus = new Map<number, { hasIn: boolean; hasOut: boolean }>();
+          
+          todayLogs.forEach((log: any) => {
+            if (!employeeStatus.has(log.employeeId)) {
+              employeeStatus.set(log.employeeId, { hasIn: false, hasOut: false });
+            }
+            const status = employeeStatus.get(log.employeeId)!;
+            if (log.eventType === 'IN') {
+              status.hasIn = true;
+            } else if (log.eventType === 'OUT') {
+              status.hasOut = true;
+            }
+          });
+
+          // Count employees who are clocked IN but not OUT
+          const activeCount = Array.from(employeeStatus.values()).filter(
+            status => status.hasIn && !status.hasOut
+          ).length;
+
+          setSystemStats(s => ({ ...s, activeToday: activeCount }));
+        }
+
+        // Fetch leave requests for vacation, sick leave, and pending approvals
+        const leaveRes = await fetch('/api/leaveRequests');
+        if (leaveRes.ok) {
+          const leaveRequests = await leaveRes.json();
+
+          // Count pending approvals
+          const pendingCount = leaveRequests.filter(
+            (req: any) => req.approvedStatus === 'pending'
+          ).length;
+
+          // Count employees on vacation today (approved status and type vacation, date range includes today)
+          const onVacationCount = leaveRequests.filter((req: any) => {
+            if (req.approvedStatus !== 'approved' || req.type !== 'vacation') return false;
+            const start = new Date(req.startDate);
+            const end = new Date(req.endDate);
+            return start <= today && end >= today;
+          }).length;
+
+          // Count employees on sick leave today (approved status and type sick, date range includes today)
+          const sickLeaveCount = leaveRequests.filter((req: any) => {
+            if (req.approvedStatus !== 'approved' || req.type !== 'sick') return false;
+            const start = new Date(req.startDate);
+            const end = new Date(req.endDate);
+            return start <= today && end >= today;
+          }).length;
+
+          setSystemStats(s => ({
+            ...s,
+            pendingApprovals: pendingCount,
+            onVacation: onVacationCount,
+            sickLeaveToday: sickLeaveCount
+          }));
+        }
+      } catch (err) {
+        console.error('Error fetching statistics:', err);
+      }
+    };
+
+    fetchStatistics();
   }, []);
 
   const handleDepartmentClick = (departmentName: string) => {
