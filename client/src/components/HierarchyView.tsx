@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -6,67 +6,70 @@ import { ChevronRight, Users, User, TrendingUp, TrendingDown } from 'lucide-reac
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface Employee {
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-  flexBalance: number;
-  vacationDays: number;
-  status: 'active' | 'vacation' | 'sick';
+  id: number;
+  name?: string;
+  surname?: string;
+  email?: string;
+  department?: string | null;
+  flexAccount?: number | null;
+  vacationDays?: number | null;
+  status?: 'active' | 'vacation' | 'sick' | string;
+  managerId?: number | null;
+  role?: string | null;
 }
 
 interface Supervisor {
-  id: string;
+  id: number;
   name: string;
-  email: string;
-  department: string;
+  email?: string;
+  department?: string | null;
   employeeCount: number;
   employees: Employee[];
 }
 
-const mockSupervisors: Supervisor[] = [
-  {
-    id: 'SUP-001',
-    name: 'Harald Schmidt',
-    email: 'harald.schmidt@stc.com',
-    department: 'Engineering',
-    employeeCount: 12,
-    employees: [
-      { id: 'EMP-001', name: 'Sophie Meier', email: 'sophie.meier@stc.com', department: 'Engineering', flexBalance: 12.5, vacationDays: 15, status: 'active' },
-      { id: 'EMP-003', name: 'Michael Weber', email: 'michael.weber@stc.com', department: 'Engineering', flexBalance: 16.0, vacationDays: 10, status: 'active' },
-      { id: 'EMP-006', name: 'Anna Schmidt', email: 'anna.schmidt@stc.com', department: 'Engineering', flexBalance: 8.5, vacationDays: 18, status: 'active' },
-      { id: 'EMP-008', name: 'Thomas Klein', email: 'thomas.klein@stc.com', department: 'Engineering', flexBalance: -2.5, vacationDays: 12, status: 'vacation' },
-      { id: 'EMP-011', name: 'Julia Wagner', email: 'julia.wagner@stc.com', department: 'Engineering', flexBalance: 5.0, vacationDays: 20, status: 'active' },
-    ],
-  },
-  {
-    id: 'SUP-002',
-    name: 'Maria Weber',
-    email: 'maria.weber@stc.com',
-    department: 'Sales',
-    employeeCount: 8,
-    employees: [
-      { id: 'EMP-002', name: 'Lisa Müller', email: 'lisa.muller@stc.com', department: 'Sales', flexBalance: 4.0, vacationDays: 16, status: 'active' },
-      { id: 'EMP-007', name: 'Robert Fischer', email: 'robert.fischer@stc.com', department: 'Sales', flexBalance: 10.5, vacationDays: 14, status: 'active' },
-      { id: 'EMP-009', name: 'Sarah Becker', email: 'sarah.becker@stc.com', department: 'Sales', flexBalance: -1.0, vacationDays: 22, status: 'sick' },
-    ],
-  },
-  {
-    id: 'SUP-003',
-    name: 'Klaus Müller',
-    email: 'klaus.muller@stc.com',
-    department: 'Marketing',
-    employeeCount: 6,
-    employees: [
-      { id: 'EMP-004', name: 'Emma Schneider', email: 'emma.schneider@stc.com', department: 'Marketing', flexBalance: 6.5, vacationDays: 17, status: 'active' },
-      { id: 'EMP-010', name: 'Max Hoffmann', email: 'max.hoffmann@stc.com', department: 'Marketing', flexBalance: 3.0, vacationDays: 19, status: 'active' },
-    ],
-  },
-];
+// state will hold supervisors derived from API
+const emptySupervisors: Supervisor[] = [];
 
 export function HierarchyView() {
   const [selectedSupervisor, setSelectedSupervisor] = useState<Supervisor | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(emptySupervisors);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchAndBuild = async () => {
+      try {
+        const res = await fetch('/api/employee');
+        if (!res.ok) return;
+        const data = await res.json();
+        const employees: Employee[] = Array.isArray(data) ? data : [];
+
+        // managers are employees with role === 'manager'
+  const managers = employees.filter(e => e.role === 'manager');
+
+        const supList: Supervisor[] = managers.map(m => {
+          const reports = employees.filter(emp => emp.managerId === m.id);
+          return {
+            id: m.id,
+            name: `${m.name ?? m.surname ?? m.email ?? 'Manager'}`,
+            email: m.email ?? '',
+            department: m.department ?? 'Unassigned',
+            employeeCount: reports.length,
+            employees: reports
+          };
+        });
+
+        if (!mounted) return;
+        setSupervisors(supList);
+      } catch (err) {
+        console.error('Failed loading hierarchy data', err);
+      }
+    };
+
+    fetchAndBuild();
+    return () => { mounted = false; };
+  }, []);
 
   const handleSupervisorClick = (supervisor: Supervisor) => {
     setSelectedSupervisor(supervisor);
@@ -84,6 +87,8 @@ export function HierarchyView() {
     return colors[dept] || 'from-blue-500 to-blue-600';
   };
 
+  const deptColor = (dept?: string | null) => getDepartmentColor((dept ?? '') as string);
+
   return (
     <>
       <Card>
@@ -95,7 +100,9 @@ export function HierarchyView() {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mockSupervisors.map((supervisor) => (
+            {(() => {
+              const visible = showAll ? supervisors : supervisors.slice(0, 6);
+              return visible.map((supervisor) => (
               <button
                 key={supervisor.id}
                 onClick={() => handleSupervisorClick(supervisor)}
@@ -107,7 +114,7 @@ export function HierarchyView() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getDepartmentColor(supervisor.department)} flex items-center justify-center text-white`}>
+                        <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${deptColor(supervisor.department)} flex items-center justify-center text-white`}>
                           <User className="h-6 w-6" />
                         </div>
                       </div>
@@ -130,8 +137,16 @@ export function HierarchyView() {
                   </div>
                 </div>
               </button>
-            ))}
+              ));
+            })()}
           </div>
+          {supervisors.length > 6 && (
+            <div className="mt-4 text-center">
+              <Button variant="ghost" onClick={() => setShowAll(s => !s)}>
+                {showAll ? `Show less` : `Show all (${supervisors.length})`}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -139,7 +154,7 @@ export function HierarchyView() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${selectedSupervisor ? getDepartmentColor(selectedSupervisor.department) : 'from-gray-400 to-gray-500'} flex items-center justify-center text-white`}>
+              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${deptColor(selectedSupervisor?.department)} flex items-center justify-center text-white`}>
                 <Users className="h-5 w-5" />
               </div>
               <div>
@@ -158,26 +173,32 @@ export function HierarchyView() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getDepartmentColor(employee.department)} flex items-center justify-center text-white text-sm`}>
-                        {employee.name.split(' ').map(n => n[0]).join('')}
-                      </div>
+                      {(() => {
+                        const display = employee.name ?? employee.email ?? '—';
+                        const initials = display.split(' ').map(n => n[0]).join('').slice(0, 3);
+                        return (
+                          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${deptColor(employee.department)} flex items-center justify-center text-white text-sm`}>
+                            {initials}
+                          </div>
+                        );
+                      })()}
                       <div>
-                        <h5>{employee.name}</h5>
-                        <p className="text-sm text-muted-foreground">{employee.email}</p>
+                        <h5>{employee.name ?? employee.email ?? 'Unknown'}</h5>
+                        <p className="text-sm text-muted-foreground">{employee.email ?? '—'}</p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 mt-3">
                       <div className="flex items-center gap-2">
-                        {employee.flexBalance >= 0 ? (
+                        {(employee.flexAccount ?? 0) >= 0 ? (
                           <TrendingUp className="h-4 w-4 text-green-500" />
                         ) : (
                           <TrendingDown className="h-4 w-4 text-red-500" />
                         )}
                         <div>
                           <div className="text-xs text-muted-foreground">Flex Balance</div>
-                          <div className={employee.flexBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {employee.flexBalance >= 0 ? '+' : ''}{employee.flexBalance}h
+                          <div className={(employee.flexAccount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {(employee.flexAccount ?? 0) >= 0 ? '+' : ''}{(employee.flexAccount ?? 0).toFixed(1)}h
                           </div>
                         </div>
                       </div>

@@ -1,7 +1,9 @@
+import React, { useEffect, useState } from 'react';
 import { TeamOverview } from './TeamOverview';
 import { TimesheetApproval } from './TimesheetApproval';
 import { VacationApproval } from './VacationApproval';
-import { SharedVacationCalendar, VacationEntry } from './SharedVacationCalendar';
+import { SharedVacationCalendar } from './SharedVacationCalendar';
+import type { VacationEntry } from './SharedVacationCalendar';
 
 // Mock data: Direct reports' vacation data for supervisor Harald
 // Demonstrates aggregation when more than 2 employees have vacation on the same day
@@ -38,21 +40,43 @@ const teamVacationData: VacationEntry[] = [
   { employeeId: 'EMP-005', employeeName: 'Thomas Klein', date: '2025-12-23', status: 'pending', department: 'Sales' },
 ];
 
-export function SupervisorDashboard() {
+export function SupervisorDashboard({ managerId }: { managerId?: number }) {
+  const [firstName, setFirstName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!managerId) return;
+      try {
+        const res = await fetch(`/api/employee/${managerId}`);
+        if (!res.ok) throw new Error(`Failed fetching employee ${managerId}: ${res.status}`);
+        const data = await res.json();
+        if (mounted) setFirstName(data.name ?? null);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [managerId]);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl mb-1">Welcome back, Harald 👋</h1>
+          <h1 className="text-3xl mb-1">Welcome back, {firstName ?? 'Harald'} 👋</h1>
           <p className="text-muted-foreground">Supervisor Dashboard - Manage your team and approvals</p>
         </div>
       </div>
 
-      <TeamOverview />
+      <TeamOverview managerId={managerId} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TimesheetApproval />
-        <VacationApproval />
+  <TimesheetApproval />
+  <VacationApproval managerId={managerId} />
       </div>
 
       {/* Team Vacation Calendar */}

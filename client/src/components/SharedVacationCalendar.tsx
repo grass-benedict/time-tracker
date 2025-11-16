@@ -12,6 +12,7 @@ export interface VacationEntry {
   date: string;
   status: 'approved' | 'pending';
   department: string;
+  type?: 'vacation' | 'sick';
 }
 
 interface SharedVacationCalendarProps {
@@ -218,7 +219,11 @@ export function SharedVacationCalendar({ title, vacationData, description }: Sha
                           <User className="h-4 w-4 text-green-600 dark:text-green-400" />
                           <div>
                             <div>{vacation.employeeName}</div>
-                            <div className="text-xs text-muted-foreground">{vacation.department}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {vacation.type && <span className="capitalize">{vacation.type}</span>}
+                              {vacation.type && vacation.department && <span> • </span>}
+                              {vacation.department}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -243,7 +248,11 @@ export function SharedVacationCalendar({ title, vacationData, description }: Sha
                           <User className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           <div>
                             <div>{vacation.employeeName}</div>
-                            <div className="text-xs text-muted-foreground">{vacation.department}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {vacation.type && <span className="capitalize">{vacation.type}</span>}
+                              {vacation.type && vacation.department && <span> • </span>}
+                              {vacation.department}
+                            </div>
                           </div>
                         </div>
                       </div>

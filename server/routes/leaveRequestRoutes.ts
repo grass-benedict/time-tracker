@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import type { Request, Response } from 'express';
 import LeaveRequest from '../models/leaveRequest.ts';
+import Employee from '../models/employee.ts';
 import { ValidationError, Op } from 'sequelize';
 
 // Request body for creating a leave request
@@ -111,9 +112,30 @@ router.put('/:id', async (req: Request<LeaveRequestParams, {}, UpdateLeaveReques
     if (body.approvedStatus && !['pending', 'approved', 'denied'].includes(body.approvedStatus)) return res.status(400).json({ message: 'Invalid approvedStatus' });
     if (body.startDate && body.endDate && body.endDate < body.startDate) return res.status(400).json({ message: 'End date cannot be before start date' });
 
+    // Fetch existing request to determine status transitions
+    const existing = await LeaveRequest.findByPk(req.params.id);
+
     const [updateCount] = await LeaveRequest.update(body, { where: { id: req.params.id } });
     if (updateCount > 0) {
       const updated = await LeaveRequest.findByPk(req.params.id);
+
+      // If the request has just been approved (was not approved before), increment employee.vacationDaysUsed
+      if (existing && updated && body.approvedStatus === 'approved' && existing.approvedStatus !== 'approved') {
+        try {
+          const s = new Date(updated.startDate as any);
+          const e = new Date(updated.endDate as any);
+          const msPerDay = 24 * 60 * 60 * 1000;
+          const days = Math.round((e.getTime() - s.getTime()) / msPerDay) + 1;
+          const inc = days > 0 ? days : 0;
+          if (inc > 0) {
+            await Employee.increment({ vacationDaysUsed: inc }, { where: { id: updated.employeeId } });
+          }
+        } catch (err) {
+          // log but don't fail the request update
+          console.error('Failed to increment employee vacationDaysUsed', err);
+        }
+      }
+
       res.json(updated);
     } else {
       res.status(404).json({ message: 'Leave request not found' });

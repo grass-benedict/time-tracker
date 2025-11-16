@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { SupervisorDashboard } from './components/SupervisorDashboard';
 import { HRDashboard } from './components/HRDashboard';
@@ -17,17 +17,61 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState<UserRole>('employee');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentUserID, setCurrentUserID] = useState<number>(2); // Will be set on login
 
-  const currentUserID = 2; // Placeholder for current logged-in user ID
+  // Fetch user role from database
+  useEffect(() => {
+    let mounted = true;
+    const fetchUserRole = async () => {
+      if (!isAuthenticated) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const res = await fetch(`/api/employee/${currentUserID}`);
+        if (!res.ok) throw new Error(`Failed to fetch user: ${res.status}`);
+        const employee = await res.json();
+        
+        if (mounted) {
+          setUserRole(employee.role?.toLowerCase() || 'employee');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch user role:', err);
+        if (mounted) {
+          setUserRole('employee'); // Default to employee on error
+          setLoading(false);
+        }
+      }
+    };
 
-  const handleLogin = (role: UserRole) => {
-    setActiveRole(role);
+    fetchUserRole();
+    return () => { mounted = false; };
+  }, [isAuthenticated, currentUserID]);
+
+  const handleLogin = (employeeId: number) => {
+    setCurrentUserID(employeeId);
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setSidebarOpen(false);
+    setUserRole(null);
+    setActiveRole('employee');
+    setCurrentUserID(2); // Reset to default
+  };
+
+  // Check if user has permission for a menu item
+  const canAccessRole = (role: UserRole): boolean => {
+    if (role === 'employee') return true; // Everyone can see Employee
+    if (role === 'supervisor') return userRole === 'manager' || userRole === 'supervisor';
+    if (role === 'hr') return userRole === 'hr';
+    if (role === 'department-calendar') return true; // Everyone can see calendar
+    return false;
   };
 
   // Show login page if not authenticated
@@ -75,7 +119,7 @@ export default function App() {
                     <SheetTitle>Navigation</SheetTitle>
                   </SheetHeader>
                   <div className="mt-6 space-y-2">
-                    {/* Employee */}
+                    {/* Employee - visible to everyone */}
                     <button
                       onClick={() => handleRoleChange('employee')}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
@@ -88,33 +132,37 @@ export default function App() {
                       <span>Employee</span>
                     </button>
 
-                    {/* Supervisor */}
-                    <button
-                      onClick={() => handleRoleChange('supervisor')}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        activeRole === 'supervisor'
-                          ? 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300'
-                          : 'hover:bg-accent text-foreground'
-                      }`}
-                    >
-                      <UserCheck className="h-5 w-5" />
-                      <span>Supervisor</span>
-                    </button>
+                    {/* Supervisor - only visible to managers/supervisors */}
+                    {canAccessRole('supervisor') && (
+                      <button
+                        onClick={() => handleRoleChange('supervisor')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          activeRole === 'supervisor'
+                            ? 'bg-green-100 dark:bg-green-950/50 text-green-700 dark:text-green-300'
+                            : 'hover:bg-accent text-foreground'
+                        }`}
+                      >
+                        <UserCheck className="h-5 w-5" />
+                        <span>Supervisor</span>
+                      </button>
+                    )}
 
-                    {/* HR */}
-                    <button
-                      onClick={() => handleRoleChange('hr')}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        activeRole === 'hr'
-                          ? 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
-                          : 'hover:bg-accent text-foreground'
-                      }`}
-                    >
-                      <Users className="h-5 w-5" />
-                      <span>HR</span>
-                    </button>
+                    {/* HR - only visible to HR role */}
+                    {canAccessRole('hr') && (
+                      <button
+                        onClick={() => handleRoleChange('hr')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          activeRole === 'hr'
+                            ? 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
+                            : 'hover:bg-accent text-foreground'
+                        }`}
+                      >
+                        <Users className="h-5 w-5" />
+                        <span>HR</span>
+                      </button>
+                    )}
 
-                    {/* Department Calendar */}
+                    {/* Department Calendar - visible to everyone */}
                     <button
                       onClick={() => handleRoleChange('department-calendar')}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
@@ -160,9 +208,9 @@ export default function App() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
   {activeRole === 'employee' && <EmployeeDashboard employeeId={currentUserID} />}
-        {activeRole === 'supervisor' && <SupervisorDashboard />}
+  {activeRole === 'supervisor' && <SupervisorDashboard managerId={currentUserID} />}
         {activeRole === 'hr' && <HRDashboard employeeId={currentUserID}/>}
-        {activeRole === 'department-calendar' && <DepartmentCalendarView />}
+        {activeRole === 'department-calendar' && <DepartmentCalendarView employeeId={currentUserID} />}
         
         {/* API Testing Interface (only shown in development) */}
         {/* 
